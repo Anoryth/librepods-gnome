@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.librepods.Daemon
+Exec=/usr/local/bin/librepods-daemon

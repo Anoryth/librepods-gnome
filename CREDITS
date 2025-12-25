@@ -1,0 +1,21 @@
+LibrePods GNOME - Credits and Acknowledgments
+
+This project would not have been possible without the following contributions:
+
+Protocol Research & Original Implementation
+-------------------------------------------
+LibrePods by Kavish Devar (@kavishdevar)
+https://github.com/kavishdevar/librepods
+License: GPL-3.0
+
+The Apple AirPods Protocol (AAP) implementation in this project is based on
+the reverse-engineering work done by the LibrePods project.
+
+Key Contributors to Original Protocol Documentation
+----------------------------------------------------
+- @tyalie - Protocol documentation
+- @tim-gromeyer - Linux implementation work
+- @devnoname120 - Root patch assistance
+- @rithvikvibhu - Hearing aid feature support
+
+And all 47+ contributors to the LibrePods project.

@@ -1,0 +1,20 @@
+[Unit]
+Description=LibrePods AirPods Daemon
+Documentation=https://github.com/librepods/librepods
+After=bluetooth.target
+
+[Service]
+Type=dbus
+BusName=org.librepods.Daemon
+ExecStart=/usr/local/bin/librepods-daemon
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

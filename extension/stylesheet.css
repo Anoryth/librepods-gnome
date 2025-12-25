@@ -1,0 +1,151 @@
+/* LibrePods GNOME Shell Extension Stylesheet */
+
+/* Battery section container */
+.librepods-battery-box {
+    spacing: 32px;
+    padding: 12px 16px;
+}
+
+/* Individual battery indicator */
+.librepods-battery-indicator {
+    spacing: 6px;
+    min-width: 48px;
+}
+
+/* Battery icon styling */
+.librepods-battery-icon {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* Battery percentage label */
+.librepods-battery-level {
+    font-size: 13px;
+    font-weight: bold;
+    color: #ffffff;
+    text-align: center;
+}
+
+/* Charging state - green color */
+.librepods-battery-level.charging {
+    color: #57e389;
+}
+
+/* Low battery warning - orange/red */
+.librepods-battery-level.low-battery {
+    color: #ff7b63;
+}
+
+/* Label under battery (Left, Right, Case) */
+.librepods-battery-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+}
+
+/* ============================================
+   Noise Control Buttons
+   ============================================ */
+
+.librepods-nc-box {
+    spacing: 6px;
+    padding: 4px 8px 8px 8px;
+}
+
+.librepods-nc-button {
+    padding: 8px 6px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    min-width: 50px;
+    transition-duration: 150ms;
+}
+
+.librepods-nc-button:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.librepods-nc-button:active {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Active/selected noise control mode */
+.librepods-nc-button.active {
+    background-color: #3584e4;
+}
+
+.librepods-nc-button.active:hover {
+    background-color: #4590e6;
+}
+
+.librepods-nc-icon {
+    color: rgba(255, 255, 255, 0.9);
+    icon-size: 18px;
+}
+
+.librepods-nc-button.active .librepods-nc-icon {
+    color: #ffffff;
+}
+
+.librepods-nc-label {
+    font-size: 10px;
+    font-weight: 500;
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.librepods-nc-button.active .librepods-nc-label {
+    color: #ffffff;
+}
+
+/* ============================================
+   Light Mode Overrides
+   ============================================ */
+
+/* For systems using light mode shell theme */
+.light .librepods-battery-level {
+    color: #1c1c1c;
+}
+
+.light .librepods-battery-level.charging {
+    color: #26a269;
+}
+
+.light .librepods-battery-level.low-battery {
+    color: #c64600;
+}
+
+.light .librepods-battery-name {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.light .librepods-nc-button {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.light .librepods-nc-button:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+}
+
+.light .librepods-nc-button.active {
+    background-color: #3584e4;
+}
+
+.light .librepods-nc-icon {
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.light .librepods-nc-button.active .librepods-nc-icon {
+    color: #ffffff;
+}
+
+.light .librepods-nc-label {
+    color: rgba(0, 0, 0, 0.7);
+}
+
+.light .librepods-nc-button.active .librepods-nc-label {
+    color: #ffffff;
+}
+
+.light .librepods-battery-icon {
+    color: rgba(0, 0, 0, 0.8);
+}

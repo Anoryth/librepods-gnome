@@ -1,0 +1,31 @@
+# Meson build directory
+daemon/build/
+build/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# GNOME Shell extension packaging
+*.zip
+*.shell-extension.zip
+
+# Compiled files
+*.o
+*.so
+
+# Debug files
+*.log
+
+# macOS
+.DS_Store
+
+# Backup files
+*.bak
+*.orig
+
+# Local development files
+CLAUDE.md
