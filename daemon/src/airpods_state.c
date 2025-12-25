@@ -233,6 +233,17 @@ bool airpods_model_supports_adaptive(AirPodsModel model)
     }
 }
 
+bool airpods_model_is_headphones(AirPodsModel model)
+{
+    switch (model) {
+    case AIRPODS_MODEL_MAX:
+    case AIRPODS_MODEL_MAX_USBC:
+        return true;
+    default:
+        return false;
+    }
+}
+
 AirPodsModel airpods_model_from_number(const char *model_number)
 {
     if (model_number == NULL || model_number[0] == '\0')

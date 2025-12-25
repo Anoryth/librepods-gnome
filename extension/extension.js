@@ -23,6 +23,9 @@ const AirPodsInterface = `
     <property name="Connected" type="b" access="read"/>
     <property name="DeviceName" type="s" access="read"/>
     <property name="DeviceModel" type="s" access="read"/>
+    <property name="IsHeadphones" type="b" access="read"/>
+    <property name="SupportsANC" type="b" access="read"/>
+    <property name="SupportsAdaptive" type="b" access="read"/>
     <property name="BatteryLeft" type="i" access="read"/>
     <property name="BatteryRight" type="i" access="read"/>
     <property name="BatteryCase" type="i" access="read"/>
@@ -114,14 +117,22 @@ class BatteryIndicator extends St.BoxLayout {
         this._charging = false;
     }
 
-    setModel(model) {
-        /* Model affects features, not display in icon mode */
-        this._currentModel = model;
+    setHeadphonesMode(isHeadphones, deviceModel = null) {
+        this._isHeadphones = isHeadphones;
 
-        /* Hide case for AirPods Max */
-        if (this._type === 'case') {
-            const isMax = model && model.includes('Max');
-            this.visible = !isMax;
+        if (this._type === 'left') {
+            /* For headphones, left indicator becomes the unified battery */
+            if (isHeadphones) {
+                this._nameLabel.text = deviceModel || 'Headphones';
+                this._icon.icon_name = 'audio-headphones-symbolic';
+            } else {
+                this._nameLabel.text = this._label;
+                this._icon.icon_name = 'audio-headphones-symbolic';
+            }
+            this.visible = true;
+        } else if (this._type === 'right' || this._type === 'case') {
+            /* Hide right and case for headphones (AirPods Max) */
+            this.visible = !isHeadphones;
         }
     }
 
@@ -361,21 +372,29 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         const connected = this._proxy.Connected;
 
         if (connected) {
-            const model = this._proxy.DeviceModel || 'Unknown AirPods';
+            const isHeadphones = this._proxy.IsHeadphones || false;
+            const supportsANC = this._proxy.SupportsANC || false;
+            const supportsAdaptive = this._proxy.SupportsAdaptive || false;
+            const deviceModel = this._proxy.DeviceModel || null;
+
             this.subtitle = this._proxy.DeviceName || 'Connected';
             this.checked = true;
             this._batteryBox.opacity = 255;
-            this._ncBox.opacity = 255;
 
-            /* Update model for images */
-            this._leftBattery.setModel(model);
-            this._rightBattery.setModel(model);
-            this._caseBattery.setModel(model);
+            /* Update layout based on device type */
+            this._leftBattery.setHeadphonesMode(isHeadphones, deviceModel);
+            this._rightBattery.setHeadphonesMode(isHeadphones);
+            this._caseBattery.setHeadphonesMode(isHeadphones);
 
             /* Update battery */
             this._leftBattery.setLevel(this._proxy.BatteryLeft, this._proxy.ChargingLeft);
-            this._rightBattery.setLevel(this._proxy.BatteryRight, this._proxy.ChargingRight);
-            this._caseBattery.setLevel(this._proxy.BatteryCase, this._proxy.ChargingCase);
+            if (!isHeadphones) {
+                this._rightBattery.setLevel(this._proxy.BatteryRight, this._proxy.ChargingRight);
+                this._caseBattery.setLevel(this._proxy.BatteryCase, this._proxy.ChargingCase);
+            }
+
+            /* Update noise control buttons visibility based on features */
+            this._updateNoiseControlVisibility(supportsANC, supportsAdaptive);
 
             /* Update noise control */
             this._updateNoiseControlButtons(this._proxy.NoiseControlMode);
@@ -390,12 +409,35 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         this._batteryBox.opacity = 128;
         this._ncBox.opacity = 128;
 
+        /* Reset to earbuds mode (show all indicators) */
+        this._leftBattery.setHeadphonesMode(false);
+        this._rightBattery.setHeadphonesMode(false);
+        this._caseBattery.setHeadphonesMode(false);
+
         this._leftBattery.setLevel(-1);
         this._rightBattery.setLevel(-1);
         this._caseBattery.setLevel(-1);
 
+        /* Show all noise control buttons and section when disconnected */
+        this._ncBox.visible = true;
         for (const button of Object.values(this._ncButtons)) {
+            button.visible = true;
             button.setActive(false);
+        }
+    }
+
+    _updateNoiseControlVisibility(supportsANC, supportsAdaptive) {
+        /* Show/hide noise control section based on features */
+        const hasNoiseControl = supportsANC;
+
+        this._ncBox.visible = hasNoiseControl;
+
+        if (hasNoiseControl) {
+            /* Always show Off button if ANC is supported */
+            this._ncButtons.off.visible = true;
+            this._ncButtons.anc.visible = true;
+            this._ncButtons.transparency.visible = true;
+            this._ncButtons.adaptive.visible = supportsAdaptive;
         }
     }
 

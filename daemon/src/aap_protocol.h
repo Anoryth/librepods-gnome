@@ -43,9 +43,10 @@
 #define AAP_CTRL_ADAPTIVE_LEVEL      0x2E
 
 /* Battery component types */
-#define AAP_BATTERY_RIGHT 0x02
-#define AAP_BATTERY_LEFT  0x04
-#define AAP_BATTERY_CASE  0x08
+#define AAP_BATTERY_SINGLE 0x01  /* AirPods Max (headphones) */
+#define AAP_BATTERY_RIGHT  0x02
+#define AAP_BATTERY_LEFT   0x04
+#define AAP_BATTERY_CASE   0x08
 
 /* Ear detection status */
 #define AAP_EAR_IN_EAR   0x00

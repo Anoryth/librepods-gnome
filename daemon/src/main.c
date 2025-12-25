@@ -147,6 +147,9 @@ static void on_bt_data_received(const uint8_t *data, size_t len, void *user_data
 
                 g_message("Detected AirPods model: %s", airpods_model_to_string(detected_model));
                 dbus_service_emit_properties_changed(app.dbus_service, "DeviceModel");
+                dbus_service_emit_properties_changed(app.dbus_service, "IsHeadphones");
+                dbus_service_emit_properties_changed(app.dbus_service, "SupportsANC");
+                dbus_service_emit_properties_changed(app.dbus_service, "SupportsAdaptive");
             }
         }
         break;

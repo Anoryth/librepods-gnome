@@ -14,6 +14,9 @@ static const gchar introspection_xml[] =
     "    <property name='DeviceName' type='s' access='read'/>"
     "    <property name='DeviceAddress' type='s' access='read'/>"
     "    <property name='DeviceModel' type='s' access='read'/>"
+    "    <property name='IsHeadphones' type='b' access='read'/>"
+    "    <property name='SupportsANC' type='b' access='read'/>"
+    "    <property name='SupportsAdaptive' type='b' access='read'/>"
     "    <property name='BatteryLeft' type='i' access='read'/>"
     "    <property name='BatteryRight' type='i' access='read'/>"
     "    <property name='BatteryCase' type='i' access='read'/>"
@@ -98,6 +101,12 @@ static GVariant *get_property(GDBusConnection *connection,
         result = g_variant_new_string(state->device_address ? state->device_address : "");
     } else if (g_strcmp0(property_name, "DeviceModel") == 0) {
         result = g_variant_new_string(airpods_model_to_string(state->model));
+    } else if (g_strcmp0(property_name, "IsHeadphones") == 0) {
+        result = g_variant_new_boolean(airpods_model_is_headphones(state->model));
+    } else if (g_strcmp0(property_name, "SupportsANC") == 0) {
+        result = g_variant_new_boolean(airpods_model_supports_anc(state->model));
+    } else if (g_strcmp0(property_name, "SupportsAdaptive") == 0) {
+        result = g_variant_new_boolean(airpods_model_supports_adaptive(state->model));
     } else if (g_strcmp0(property_name, "BatteryLeft") == 0) {
         result = g_variant_new_int32(state->battery.left.level);
     } else if (g_strcmp0(property_name, "BatteryRight") == 0) {

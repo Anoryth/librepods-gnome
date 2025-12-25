@@ -137,6 +137,9 @@ bool airpods_model_supports_anc(AirPodsModel model);
 /* Check if model supports adaptive transparency */
 bool airpods_model_supports_adaptive(AirPodsModel model);
 
+/* Check if model is headphones (AirPods Max) vs earbuds */
+bool airpods_model_is_headphones(AirPodsModel model);
+
 /* Get model enum from model number string (e.g., "A2699" -> AIRPODS_MODEL_PRO_2) */
 AirPodsModel airpods_model_from_number(const char *model_number);
 

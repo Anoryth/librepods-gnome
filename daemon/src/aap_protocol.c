@@ -116,6 +116,11 @@ AapParseResult aap_parse_battery(const uint8_t *data, size_t len, AapBatteryData
         }
 
         switch (component) {
+        case AAP_BATTERY_SINGLE:
+            /* AirPods Max: single battery, store in left_level */
+            battery->left_level = (level <= 100) ? (int8_t)level : -1;
+            battery->left_status = bat_status;
+            break;
         case AAP_BATTERY_LEFT:
             battery->left_level = (level <= 100) ? (int8_t)level : -1;
             battery->left_status = bat_status;
