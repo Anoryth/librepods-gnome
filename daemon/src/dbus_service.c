@@ -28,6 +28,7 @@ static const gchar introspection_xml[] =
     "    <property name='LeftInEar' type='b' access='read'/>"
     "    <property name='RightInEar' type='b' access='read'/>"
     "    <property name='AdaptiveNoiseLevel' type='i' access='read'/>"
+    "    <property name='EarPauseMode' type='i' access='read'/>"
     "    <method name='SetNoiseControlMode'>"
     "      <arg type='s' name='mode' direction='in'/>"
     "    </method>"
@@ -36,6 +37,9 @@ static const gchar introspection_xml[] =
     "    </method>"
     "    <method name='SetAdaptiveNoiseLevel'>"
     "      <arg type='i' name='level' direction='in'/>"
+    "    </method>"
+    "    <method name='SetEarPauseMode'>"
+    "      <arg type='i' name='mode' direction='in'/>"
     "    </method>"
     "    <signal name='DeviceConnected'>"
     "      <arg type='s' name='address'/>"
@@ -76,6 +80,9 @@ struct DbusService {
 
     DbusAdaptiveLevelCallback adaptive_level_callback;
     void *adaptive_level_user_data;
+
+    DbusEarPauseModeCallback ear_pause_mode_callback;
+    void *ear_pause_mode_user_data;
 };
 
 static GVariant *get_property(GDBusConnection *connection,
@@ -129,6 +136,8 @@ static GVariant *get_property(GDBusConnection *connection,
         result = g_variant_new_boolean(state->ear_detection.right_in_ear);
     } else if (g_strcmp0(property_name, "AdaptiveNoiseLevel") == 0) {
         result = g_variant_new_int32(state->adaptive_noise_level);
+    } else if (g_strcmp0(property_name, "EarPauseMode") == 0) {
+        result = g_variant_new_int32(state->ear_pause_mode);
     }
 
     g_mutex_unlock(&state->lock);
@@ -180,6 +189,18 @@ static void handle_method_call(GDBusConnection *connection,
 
         if (service->adaptive_level_callback) {
             service->adaptive_level_callback(level, service->adaptive_level_user_data);
+        }
+
+        g_dbus_method_invocation_return_value(invocation, NULL);
+
+    } else if (g_strcmp0(method_name, "SetEarPauseMode") == 0) {
+        gint32 mode = 0;
+        g_variant_get(parameters, "(i)", &mode);
+
+        g_message("D-Bus: SetEarPauseMode(%d)", mode);
+
+        if (service->ear_pause_mode_callback) {
+            service->ear_pause_mode_callback(mode, service->ear_pause_mode_user_data);
         }
 
         g_dbus_method_invocation_return_value(invocation, NULL);
@@ -326,6 +347,14 @@ void dbus_service_set_adaptive_level_callback(DbusService *service,
 {
     service->adaptive_level_callback = callback;
     service->adaptive_level_user_data = user_data;
+}
+
+void dbus_service_set_ear_pause_mode_callback(DbusService *service,
+                                               DbusEarPauseModeCallback callback,
+                                               void *user_data)
+{
+    service->ear_pause_mode_callback = callback;
+    service->ear_pause_mode_user_data = user_data;
 }
 
 static void emit_signal(DbusService *service,

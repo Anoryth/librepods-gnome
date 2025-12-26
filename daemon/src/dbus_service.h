@@ -26,6 +26,9 @@ typedef void (*DbusConvAwarenessCallback)(bool enabled, void *user_data);
 /* Callback for adaptive noise level change request */
 typedef void (*DbusAdaptiveLevelCallback)(int level, void *user_data);
 
+/* Callback for ear pause mode change request */
+typedef void (*DbusEarPauseModeCallback)(int mode, void *user_data);
+
 /* D-Bus service context */
 typedef struct DbusService DbusService;
 
@@ -73,6 +76,13 @@ void dbus_service_set_conv_awareness_callback(DbusService *service,
  */
 void dbus_service_set_adaptive_level_callback(DbusService *service,
                                                DbusAdaptiveLevelCallback callback,
+                                               void *user_data);
+
+/**
+ * Set callback for ear pause mode change requests
+ */
+void dbus_service_set_ear_pause_mode_callback(DbusService *service,
+                                               DbusEarPauseModeCallback callback,
                                                void *user_data);
 
 /**

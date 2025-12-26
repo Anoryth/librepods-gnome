@@ -15,6 +15,7 @@
 #include "aap_protocol.h"
 #include "bluetooth.h"
 #include "bluez_monitor.h"
+#include "config.h"
 #include "dbus_service.h"
 #include "media_control.h"
 
@@ -26,6 +27,7 @@ typedef struct {
     BluezMonitor *bluez_monitor;
     DbusService *dbus_service;
     MediaControl *media_control;
+    LibrePodsConfig config;
 
     /* Pending connect info */
     char *pending_address;
@@ -309,6 +311,28 @@ static void on_set_adaptive_level(int level, void *user_data)
     bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
 }
 
+static void on_set_ear_pause_mode(int mode, void *user_data)
+{
+    g_message("Setting ear pause mode to %d", mode);
+
+    /* Update state */
+    g_mutex_lock(&app.state.lock);
+    app.state.ear_pause_mode = mode;
+    g_mutex_unlock(&app.state.lock);
+
+    /* Update media control */
+    if (app.media_control) {
+        media_control_set_ear_pause_mode(app.media_control, (EarPauseMode)mode);
+    }
+
+    /* Save to config file */
+    app.config.ear_pause_mode = mode;
+    config_save(&app.config);
+
+    /* Notify property change */
+    dbus_service_emit_properties_changed(app.dbus_service, "EarPauseMode");
+}
+
 /* ============================================================================
  * Signal handlers
  * ========================================================================== */
@@ -370,6 +394,9 @@ int main(int argc, char *argv[])
 {
     g_message("LibrePods Daemon starting...");
 
+    /* Load configuration */
+    config_load(&app.config);
+
     /* Initialize state */
     airpods_state_init(&app.state);
 
@@ -391,6 +418,7 @@ int main(int argc, char *argv[])
     dbus_service_set_noise_control_callback(app.dbus_service, on_set_noise_control, NULL);
     dbus_service_set_conv_awareness_callback(app.dbus_service, on_set_conv_awareness, NULL);
     dbus_service_set_adaptive_level_callback(app.dbus_service, on_set_adaptive_level, NULL);
+    dbus_service_set_ear_pause_mode_callback(app.dbus_service, on_set_ear_pause_mode, NULL);
 
     if (!dbus_service_start(app.dbus_service)) {
         g_error("Failed to start D-Bus service");
@@ -403,9 +431,10 @@ int main(int argc, char *argv[])
     if (app.media_control == NULL) {
         g_warning("Failed to create media control (MPRIS pause/resume disabled)");
     } else {
-        /* Default: pause when one pod is removed */
-        media_control_set_ear_pause_mode(app.media_control, EAR_PAUSE_ONE_OUT);
-        g_message("Media control enabled (ear detection pause/resume)");
+        /* Load ear pause mode from config */
+        app.state.ear_pause_mode = app.config.ear_pause_mode;
+        media_control_set_ear_pause_mode(app.media_control, (EarPauseMode)app.config.ear_pause_mode);
+        g_message("Media control enabled (ear_pause_mode=%d)", app.config.ear_pause_mode);
     }
 
     /* Create BlueZ monitor */

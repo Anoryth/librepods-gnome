@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.librepods" path="/org/gnome/shell/extensions/librepods/">
+    <key name="low-battery-threshold" type="i">
+      <default>20</default>
+      <summary>Low battery threshold</summary>
+      <description>Battery percentage at which to show low battery notification</description>
+    </key>
+    <key name="enable-low-battery-notifications" type="b">
+      <default>true</default>
+      <summary>Enable low battery notifications</summary>
+      <description>Show notification when battery is low</description>
+    </key>
+    <key name="enable-connection-notifications" type="b">
+      <default>true</default>
+      <summary>Enable connection notifications</summary>
+      <description>Show notification when AirPods connect or disconnect</description>
+    </key>
+  </schema>
+</schemalist>

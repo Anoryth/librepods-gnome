@@ -26,6 +26,7 @@ sources = files(
     'src/aap_protocol.c',
     'src/bluetooth.c',
     'src/bluez_monitor.c',
+    'src/config.c',
     'src/dbus_service.c',
     'src/media_control.c',
 )

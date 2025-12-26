@@ -22,15 +22,24 @@ const AirPodsInterface = `
     <property name="AdaptiveNoiseLevel" type="i" access="read"/>
     <property name="LeftInEar" type="b" access="read"/>
     <property name="RightInEar" type="b" access="read"/>
+    <property name="EarPauseMode" type="i" access="read"/>
     <method name="SetConversationalAwareness">
       <arg type="b" name="enabled" direction="in"/>
     </method>
     <method name="SetAdaptiveNoiseLevel">
       <arg type="i" name="level" direction="in"/>
     </method>
+    <method name="SetEarPauseMode">
+      <arg type="i" name="mode" direction="in"/>
+    </method>
   </interface>
 </node>
 `;
+
+/* Ear pause mode constants */
+const EAR_PAUSE_DISABLED = 0;
+const EAR_PAUSE_ONE_OUT = 1;
+const EAR_PAUSE_BOTH_OUT = 2;
 
 const AirPodsProxy = Gio.DBusProxy.makeProxyWrapper(AirPodsInterface);
 
@@ -52,56 +61,97 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
         this._statusRow = new Adw.ActionRow({
             title: 'Connection',
             subtitle: 'Checking...',
+            icon_name: 'bluetooth-active-symbolic',
         });
         statusGroup.add(this._statusRow);
 
         this._earDetectionRow = new Adw.ActionRow({
             title: 'Ear Detection',
             subtitle: 'Unknown',
+            icon_name: 'audio-headphones-symbolic',
         });
         statusGroup.add(this._earDetectionRow);
 
         /* Features group */
         const featuresGroup = new Adw.PreferencesGroup({
-            title: 'Features',
-            description: 'AirPods advanced features',
+            title: 'AirPods Features',
+            description: 'Advanced features for your AirPods',
         });
         page.add(featuresGroup);
 
-        /* Conversational Awareness toggle */
-        this._caSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-        });
-
-        this._caRow = new Adw.ActionRow({
+        /* Conversational Awareness - using Adw.SwitchRow */
+        this._caRow = new Adw.SwitchRow({
             title: 'Conversational Awareness',
-            subtitle: 'Lower volume when speaking',
+            subtitle: 'Automatically lower volume when you speak',
         });
-        this._caRow.add_suffix(this._caSwitch);
-        this._caRow.activatable_widget = this._caSwitch;
         featuresGroup.add(this._caRow);
 
-        /* Adaptive Noise Level slider */
-        this._adaptiveScale = new Gtk.Scale({
-            orientation: Gtk.Orientation.HORIZONTAL,
+        /* Adaptive Noise Level - using Adw.SpinRow */
+        this._adaptiveRow = new Adw.SpinRow({
+            title: 'Adaptive Noise Level',
+            subtitle: 'Adjust the transparency level (0-100)',
             adjustment: new Gtk.Adjustment({
                 lower: 0,
                 upper: 100,
-                step_increment: 1,
+                step_increment: 5,
                 page_increment: 10,
             }),
-            draw_value: true,
-            value_pos: Gtk.PositionType.RIGHT,
-            hexpand: true,
-            width_request: 200,
         });
-
-        this._adaptiveRow = new Adw.ActionRow({
-            title: 'Adaptive Noise Level',
-            subtitle: 'Adjust transparency level',
-        });
-        this._adaptiveRow.add_suffix(this._adaptiveScale);
         featuresGroup.add(this._adaptiveRow);
+
+        /* Media Control group */
+        const mediaGroup = new Adw.PreferencesGroup({
+            title: 'Media Control',
+            description: 'Configure media playback behavior',
+        });
+        page.add(mediaGroup);
+
+        /* Ear pause mode - using Adw.ComboRow */
+        const pauseModeModel = new Gtk.StringList();
+        pauseModeModel.append('Disabled');
+        pauseModeModel.append('When one earbud removed');
+        pauseModeModel.append('When both earbuds removed');
+
+        this._earPauseRow = new Adw.ComboRow({
+            title: 'Auto-pause media',
+            subtitle: 'Pause playback when earbuds are removed',
+            model: pauseModeModel,
+        });
+        mediaGroup.add(this._earPauseRow);
+
+        /* Notifications group */
+        const notificationsGroup = new Adw.PreferencesGroup({
+            title: 'Notifications',
+            description: 'Configure notification preferences',
+        });
+        page.add(notificationsGroup);
+
+        /* Connection notifications - using Adw.SwitchRow */
+        this._connectionNotifRow = new Adw.SwitchRow({
+            title: 'Connection notifications',
+            subtitle: 'Notify when AirPods connect or disconnect',
+        });
+        notificationsGroup.add(this._connectionNotifRow);
+
+        /* Low battery notifications - using Adw.SwitchRow */
+        this._batteryNotifRow = new Adw.SwitchRow({
+            title: 'Low battery notifications',
+            subtitle: 'Notify when battery drops below threshold',
+        });
+        notificationsGroup.add(this._batteryNotifRow);
+
+        /* Battery threshold - using Adw.SpinRow */
+        this._batteryThresholdRow = new Adw.SpinRow({
+            title: 'Low battery threshold',
+            subtitle: 'Notify when battery drops below this percentage',
+            adjustment: new Gtk.Adjustment({
+                lower: 5,
+                upper: 50,
+                step_increment: 5,
+                page_increment: 10,
+            }),
+        });
+        notificationsGroup.add(this._batteryThresholdRow);
 
         /* About group */
         const aboutGroup = new Adw.PreferencesGroup({
@@ -112,30 +162,55 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
         const aboutRow = new Adw.ActionRow({
             title: 'LibrePods',
             subtitle: 'AirPods integration for GNOME',
+            icon_name: 'audio-headphones-symbolic',
         });
         aboutGroup.add(aboutRow);
 
         const versionRow = new Adw.ActionRow({
             title: 'Version',
             subtitle: '0.1.0',
+            icon_name: 'dialog-information-symbolic',
         });
         aboutGroup.add(versionRow);
+
+        /* Load settings */
+        this._settings = this.getSettings();
+        this._connectionNotifRow.active = this._settings.get_boolean('enable-connection-notifications');
+        this._batteryNotifRow.active = this._settings.get_boolean('enable-low-battery-notifications');
+        this._batteryThresholdRow.value = this._settings.get_int('low-battery-threshold');
 
         /* Connect to daemon */
         this._connectProxy();
 
-        /* Connect UI signals */
-        this._caSwitch.connect('state-set', (widget, state) => {
-            if (this._proxy && this._proxy.Connected) {
-                this._proxy.SetConversationalAwarenessRemote(state, () => {});
-            }
-            return false;
+        /* Connect settings signals */
+        this._connectionNotifRow.connect('notify::active', () => {
+            this._settings.set_boolean('enable-connection-notifications', this._connectionNotifRow.active);
         });
 
-        this._adaptiveScale.connect('value-changed', () => {
+        this._batteryNotifRow.connect('notify::active', () => {
+            this._settings.set_boolean('enable-low-battery-notifications', this._batteryNotifRow.active);
+        });
+
+        this._batteryThresholdRow.connect('notify::value', () => {
+            this._settings.set_int('low-battery-threshold', this._batteryThresholdRow.value);
+        });
+
+        /* Connect UI signals for daemon settings */
+        this._caRow.connect('notify::active', () => {
             if (this._proxy && this._proxy.Connected) {
-                const value = Math.round(this._adaptiveScale.get_value());
-                this._proxy.SetAdaptiveNoiseLevelRemote(value, () => {});
+                this._proxy.SetConversationalAwarenessRemote(this._caRow.active, () => {});
+            }
+        });
+
+        this._adaptiveRow.connect('notify::value', () => {
+            if (this._proxy && this._proxy.Connected) {
+                this._proxy.SetAdaptiveNoiseLevelRemote(this._adaptiveRow.value, () => {});
+            }
+        });
+
+        this._earPauseRow.connect('notify::selected', () => {
+            if (this._proxy) {
+                this._proxy.SetEarPauseModeRemote(this._earPauseRow.selected, () => {});
             }
         });
     }
@@ -167,6 +242,9 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
             this._updateState();
         });
 
+        /* Initialize ear pause mode (available even when AirPods are not connected) */
+        this._earPauseRow.selected = this._proxy.EarPauseMode;
+
         this._updateState();
     }
 
@@ -183,8 +261,9 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
             const rightEar = this._proxy.RightInEar ? 'In ear' : 'Out';
             this._earDetectionRow.subtitle = `Left: ${leftEar}, Right: ${rightEar}`;
 
-            this._caSwitch.active = this._proxy.ConversationalAwareness;
-            this._adaptiveScale.set_value(this._proxy.AdaptiveNoiseLevel);
+            this._caRow.active = this._proxy.ConversationalAwareness;
+            this._adaptiveRow.value = this._proxy.AdaptiveNoiseLevel;
+            this._earPauseRow.selected = this._proxy.EarPauseMode;
 
             this._setSensitive(true);
         } else {
@@ -197,5 +276,6 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
     _setSensitive(sensitive) {
         this._caRow.sensitive = sensitive;
         this._adaptiveRow.sensitive = sensitive;
+        /* Ear pause mode is always available (doesn't require AirPods connection) */
     }
 }

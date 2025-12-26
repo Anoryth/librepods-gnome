@@ -13,6 +13,7 @@ import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -71,7 +72,7 @@ const AirPodsProxy = Gio.DBusProxy.makeProxyWrapper(AirPodsInterface);
 /* Icon size for battery indicators */
 const BATTERY_ICON_SIZE = 32;
 
-/* Battery indicator widget with symbolic icon */
+/* Battery indicator widget with symbolic icon and progress bar */
 const BatteryIndicator = GObject.registerClass(
 class BatteryIndicator extends St.BoxLayout {
     _init(type, label) {
@@ -99,6 +100,18 @@ class BatteryIndicator extends St.BoxLayout {
             style_class: 'librepods-battery-icon',
         });
 
+        /* Progress bar container */
+        this._progressContainer = new St.BoxLayout({
+            style_class: 'librepods-progress-container',
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+
+        /* Progress bar fill */
+        this._progressFill = new St.Widget({
+            style_class: 'librepods-progress-fill',
+        });
+        this._progressContainer.add_child(this._progressFill);
+
         this._levelLabel = new St.Label({
             text: '--',
             style_class: 'librepods-battery-level',
@@ -110,6 +123,7 @@ class BatteryIndicator extends St.BoxLayout {
         });
 
         this.add_child(this._icon);
+        this.add_child(this._progressContainer);
         this.add_child(this._levelLabel);
         this.add_child(this._nameLabel);
 
@@ -143,19 +157,38 @@ class BatteryIndicator extends St.BoxLayout {
         if (level < 0) {
             this._levelLabel.text = '--';
             this._icon.opacity = 128;
+            this._progressContainer.opacity = 128;
+            this._progressFill.width = 0;
             this._levelLabel.remove_style_class_name('charging');
             this._levelLabel.remove_style_class_name('low-battery');
+            this._progressFill.remove_style_class_name('charging');
+            this._progressFill.remove_style_class_name('low');
+            this._progressFill.remove_style_class_name('medium');
         } else {
             this._levelLabel.text = `${level}%`;
             this._icon.opacity = 255;
+            this._progressContainer.opacity = 255;
 
+            /* Set progress bar width (max 40px) */
+            this._progressFill.width = Math.round(level * 0.4);
+
+            /* Update label styles */
             this._levelLabel.remove_style_class_name('charging');
             this._levelLabel.remove_style_class_name('low-battery');
 
+            /* Update progress bar styles */
+            this._progressFill.remove_style_class_name('charging');
+            this._progressFill.remove_style_class_name('low');
+            this._progressFill.remove_style_class_name('medium');
+
             if (charging) {
                 this._levelLabel.add_style_class_name('charging');
+                this._progressFill.add_style_class_name('charging');
             } else if (level <= 20) {
                 this._levelLabel.add_style_class_name('low-battery');
+                this._progressFill.add_style_class_name('low');
+            } else if (level <= 50) {
+                this._progressFill.add_style_class_name('medium');
             }
         }
     }
@@ -222,8 +255,41 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         this._propertiesChangedId = 0;
         this._signalIds = [];
 
+        /* Load settings */
+        this._settings = extensionObject.getSettings();
+
+        /* Track battery levels for low battery notifications */
+        this._lastBatteryLeft = -1;
+        this._lastBatteryRight = -1;
+        this._lowBatteryNotified = {left: false, right: false};
+
+        /* Create notification source */
+        this._notificationSource = null;
+
         this._createMenu();
         this._connectProxy();
+    }
+
+    _getNotificationSource() {
+        if (this._notificationSource === null) {
+            this._notificationSource = new MessageTray.Source({
+                title: 'LibrePods',
+                iconName: 'audio-headphones-symbolic',
+            });
+            Main.messageTray.add(this._notificationSource);
+        }
+        return this._notificationSource;
+    }
+
+    _showNotification(title, body) {
+        const source = this._getNotificationSource();
+        const notification = new MessageTray.Notification({
+            source: source,
+            title: title,
+            body: body,
+            iconName: 'audio-headphones-symbolic',
+        });
+        source.addNotification(notification);
     }
 
     _createMenu() {
@@ -263,10 +329,10 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         });
 
         this._ncButtons = {
-            off: new NoiseControlButton('off', 'Off', 'audio-volume-high-symbolic'),
-            anc: new NoiseControlButton('anc', 'ANC', 'audio-volume-muted-symbolic'),
-            transparency: new NoiseControlButton('transparency', 'Trans', 'audio-input-microphone-symbolic'),
-            adaptive: new NoiseControlButton('adaptive', 'Adapt', 'view-refresh-symbolic'),
+            off: new NoiseControlButton('off', 'Off', 'audio-speakers-symbolic'),
+            anc: new NoiseControlButton('anc', 'ANC', 'microphone-sensitivity-muted-symbolic'),
+            transparency: new NoiseControlButton('transparency', 'Hear', 'audio-input-microphone-high-symbolic'),
+            adaptive: new NoiseControlButton('adaptive', 'Auto', 'emblem-synchronizing-symbolic'),
         };
 
         for (const [mode, button] of Object.entries(this._ncButtons)) {
@@ -347,11 +413,26 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
 
     _onDeviceConnected(proxy, sender, [address, name]) {
         console.log(`LibrePods: Device connected - ${name}`);
+
+        /* Reset low battery notification state */
+        this._lowBatteryNotified = {left: false, right: false};
+
+        /* Show connection notification */
+        if (this._settings.get_boolean('enable-connection-notifications')) {
+            this._showNotification('AirPods Connected', name || 'AirPods');
+        }
+
         this._updateState();
     }
 
     _onDeviceDisconnected(proxy, sender, [address, name]) {
         console.log(`LibrePods: Device disconnected - ${name}`);
+
+        /* Show disconnection notification */
+        if (this._settings.get_boolean('enable-connection-notifications')) {
+            this._showNotification('AirPods Disconnected', name || 'AirPods');
+        }
+
         this._updateDisconnectedState();
     }
 
@@ -359,6 +440,48 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         this._leftBattery.setLevel(left, this._proxy.ChargingLeft);
         this._rightBattery.setLevel(right, this._proxy.ChargingRight);
         this._caseBattery.setLevel(caseBattery, this._proxy.ChargingCase);
+
+        /* Check for low battery notifications */
+        this._checkLowBattery(left, right);
+    }
+
+    _checkLowBattery(left, right) {
+        if (!this._settings.get_boolean('enable-low-battery-notifications'))
+            return;
+
+        const threshold = this._settings.get_int('low-battery-threshold');
+        const isHeadphones = this._proxy?.IsHeadphones || false;
+
+        if (isHeadphones) {
+            /* For AirPods Max, only check left (main battery) */
+            if (left >= 0 && left <= threshold && !this._lowBatteryNotified.left) {
+                this._lowBatteryNotified.left = true;
+                this._showNotification('Low Battery', `Battery at ${left}%`);
+            } else if (left > threshold) {
+                this._lowBatteryNotified.left = false;
+            }
+        } else {
+            /* For earbuds, check both */
+            let messages = [];
+
+            if (left >= 0 && left <= threshold && !this._lowBatteryNotified.left) {
+                this._lowBatteryNotified.left = true;
+                messages.push(`Left: ${left}%`);
+            } else if (left > threshold) {
+                this._lowBatteryNotified.left = false;
+            }
+
+            if (right >= 0 && right <= threshold && !this._lowBatteryNotified.right) {
+                this._lowBatteryNotified.right = true;
+                messages.push(`Right: ${right}%`);
+            } else if (right > threshold) {
+                this._lowBatteryNotified.right = false;
+            }
+
+            if (messages.length > 0) {
+                this._showNotification('Low Battery', messages.join(', '));
+            }
+        }
     }
 
     _onNoiseControlChanged(proxy, sender, [mode]) {
@@ -387,11 +510,16 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
             this._caseBattery.setHeadphonesMode(isHeadphones);
 
             /* Update battery */
-            this._leftBattery.setLevel(this._proxy.BatteryLeft, this._proxy.ChargingLeft);
+            const batteryLeft = this._proxy.BatteryLeft;
+            const batteryRight = this._proxy.BatteryRight;
+            this._leftBattery.setLevel(batteryLeft, this._proxy.ChargingLeft);
             if (!isHeadphones) {
-                this._rightBattery.setLevel(this._proxy.BatteryRight, this._proxy.ChargingRight);
+                this._rightBattery.setLevel(batteryRight, this._proxy.ChargingRight);
                 this._caseBattery.setLevel(this._proxy.BatteryCase, this._proxy.ChargingCase);
             }
+
+            /* Check for low battery on state update */
+            this._checkLowBattery(batteryLeft, batteryRight);
 
             /* Update noise control buttons visibility based on features */
             this._updateNoiseControlVisibility(supportsANC, supportsAdaptive);
@@ -476,6 +604,11 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
             }
         }
 
+        if (this._notificationSource) {
+            this._notificationSource.destroy();
+            this._notificationSource = null;
+        }
+
         super.destroy();
     }
 });
@@ -490,8 +623,22 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
         this._indicator.icon_name = 'audio-headphones-symbolic';
         this._indicator.visible = false;
 
+        /* Create battery label for panel */
+        this._batteryLabel = new St.Label({
+            text: '',
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'librepods-panel-battery',
+        });
+        this._batteryLabel.visible = false;
+
+        /* Add label after indicator icon */
+        this.add_child(this._batteryLabel);
+
         this._toggle = new LibrePodsToggle(extensionObject);
         this.quickSettingsItems.push(this._toggle);
+
+        this._proxy = null;
+        this._propertiesChangedId = 0;
 
         /* Watch for connection state to show/hide indicator */
         this._watchConnection();
@@ -499,7 +646,7 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
 
     _watchConnection() {
         try {
-            const proxy = new AirPodsProxy(
+            this._proxy = new AirPodsProxy(
                 Gio.DBus.session,
                 'org.librepods.Daemon',
                 '/org/librepods/AirPods',
@@ -507,11 +654,11 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
                     if (error)
                         return;
 
-                    proxy.connect('g-properties-changed', () => {
-                        this._indicator.visible = proxy.Connected;
+                    this._propertiesChangedId = proxy.connect('g-properties-changed', () => {
+                        this._updateIndicator();
                     });
 
-                    this._indicator.visible = proxy.Connected;
+                    this._updateIndicator();
                 }
             );
         } catch (e) {
@@ -519,7 +666,55 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
         }
     }
 
+    _updateIndicator() {
+        if (!this._proxy)
+            return;
+
+        const connected = this._proxy.Connected;
+        this._indicator.visible = connected;
+        this._batteryLabel.visible = connected;
+
+        if (connected) {
+            const isHeadphones = this._proxy.IsHeadphones || false;
+            const left = this._proxy.BatteryLeft;
+            const right = this._proxy.BatteryRight;
+
+            /* Get the lowest battery level */
+            let lowestBattery = -1;
+            if (isHeadphones) {
+                lowestBattery = left;
+            } else {
+                if (left >= 0 && right >= 0) {
+                    lowestBattery = Math.min(left, right);
+                } else if (left >= 0) {
+                    lowestBattery = left;
+                } else if (right >= 0) {
+                    lowestBattery = right;
+                }
+            }
+
+            if (lowestBattery >= 0) {
+                this._batteryLabel.text = `${lowestBattery}%`;
+
+                /* Update style based on battery level */
+                this._batteryLabel.remove_style_class_name('low');
+                this._batteryLabel.remove_style_class_name('critical');
+
+                if (lowestBattery <= 10) {
+                    this._batteryLabel.add_style_class_name('critical');
+                } else if (lowestBattery <= 20) {
+                    this._batteryLabel.add_style_class_name('low');
+                }
+            } else {
+                this._batteryLabel.text = '';
+            }
+        }
+    }
+
     destroy() {
+        if (this._proxy && this._propertiesChangedId > 0) {
+            this._proxy.disconnect(this._propertiesChangedId);
+        }
         this._toggle.destroy();
         super.destroy();
     }
