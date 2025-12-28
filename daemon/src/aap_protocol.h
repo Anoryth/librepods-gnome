@@ -41,6 +41,13 @@
 #define AAP_CTRL_ONE_BUD_ANC         0x1B
 #define AAP_CTRL_CONV_AWARENESS      0x28
 #define AAP_CTRL_ADAPTIVE_LEVEL      0x2E
+#define AAP_CTRL_ALLOW_OFF_OPTION    0x34
+
+/* Listening modes bitmask values (for 0x1A ListeningModeConfigs) */
+#define AAP_LISTENING_MODE_OFF          0x01
+#define AAP_LISTENING_MODE_ANC          0x02
+#define AAP_LISTENING_MODE_TRANSPARENCY 0x04
+#define AAP_LISTENING_MODE_ADAPTIVE     0x08
 
 /* Battery component types */
 #define AAP_BATTERY_SINGLE 0x01  /* AirPods Max (headphones) */
@@ -91,6 +98,7 @@ typedef enum {
     AAP_PKT_TYPE_CONV_AWARENESS,
     AAP_PKT_TYPE_CA_DETECTION,
     AAP_PKT_TYPE_METADATA,
+    AAP_PKT_TYPE_LISTENING_MODES,
 } AapPacketType;
 
 /* Parsed battery data */
@@ -117,6 +125,15 @@ typedef struct {
     char manufacturer[32];
 } AapMetadata;
 
+/* Listening modes configuration (bitmask) */
+typedef struct {
+    bool off_enabled;
+    bool transparency_enabled;
+    bool anc_enabled;
+    bool adaptive_enabled;
+    uint8_t raw_value;  /* Raw bitmask for debugging */
+} AapListeningModes;
+
 /* Parse result union */
 typedef struct {
     AapPacketType type;
@@ -127,6 +144,7 @@ typedef struct {
         bool conversational_awareness;
         int ca_volume_level;
         AapMetadata metadata;
+        AapListeningModes listening_modes;
     } data;
 } AapParsedPacket;
 
@@ -188,6 +206,14 @@ void aap_build_adaptive_level_cmd(int level, uint8_t *buffer);
  * @param buffer Output buffer (must be AAP_CONTROL_CMD_SIZE bytes)
  */
 void aap_build_conv_awareness_cmd(bool enable, uint8_t *buffer);
+
+/**
+ * Build listening modes configuration command
+ *
+ * @param modes Bitmask of enabled modes (use AAP_LISTENING_MODE_* constants)
+ * @param buffer Output buffer (must be AAP_CONTROL_CMD_SIZE bytes)
+ */
+void aap_build_listening_modes_cmd(uint8_t modes, uint8_t *buffer);
 
 /**
  * Debug: print packet as hex string

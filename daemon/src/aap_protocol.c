@@ -246,6 +246,18 @@ static AapParseResult parse_control_packet(const uint8_t *data, size_t len, AapP
         result->data.conversational_awareness = (data[7] == 0x01);
         return AAP_PARSE_OK;
 
+    case AAP_CTRL_LISTENING_MODES:
+        result->type = AAP_PKT_TYPE_LISTENING_MODES;
+        {
+            uint8_t modes = data[7];
+            result->data.listening_modes.raw_value = modes;
+            result->data.listening_modes.off_enabled = (modes & AAP_LISTENING_MODE_OFF) != 0;
+            result->data.listening_modes.transparency_enabled = (modes & AAP_LISTENING_MODE_TRANSPARENCY) != 0;
+            result->data.listening_modes.anc_enabled = (modes & AAP_LISTENING_MODE_ANC) != 0;
+            result->data.listening_modes.adaptive_enabled = (modes & AAP_LISTENING_MODE_ADAPTIVE) != 0;
+        }
+        return AAP_PARSE_OK;
+
     default:
         result->type = AAP_PKT_TYPE_UNKNOWN;
         return AAP_PARSE_OK;  /* Not an error, just unhandled */
@@ -331,6 +343,22 @@ void aap_build_adaptive_level_cmd(int level, uint8_t *buffer)
 void aap_build_conv_awareness_cmd(bool enable, uint8_t *buffer)
 {
     memcpy(buffer, enable ? AAP_PKT_CA_ENABLE : AAP_PKT_CA_DISABLE, AAP_CONTROL_CMD_SIZE);
+}
+
+void aap_build_listening_modes_cmd(uint8_t modes, uint8_t *buffer)
+{
+    /* 04 00 04 00 09 00 1A [modes] 00 00 00 */
+    buffer[0] = 0x04;
+    buffer[1] = 0x00;
+    buffer[2] = 0x04;
+    buffer[3] = 0x00;
+    buffer[4] = 0x09;
+    buffer[5] = 0x00;
+    buffer[6] = AAP_CTRL_LISTENING_MODES;
+    buffer[7] = modes;
+    buffer[8] = 0x00;
+    buffer[9] = 0x00;
+    buffer[10] = 0x00;
 }
 
 void aap_debug_print_packet(const char *prefix, const uint8_t *data, size_t len)

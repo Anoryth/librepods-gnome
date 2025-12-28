@@ -29,6 +29,10 @@ static const gchar introspection_xml[] =
     "    <property name='RightInEar' type='b' access='read'/>"
     "    <property name='AdaptiveNoiseLevel' type='i' access='read'/>"
     "    <property name='EarPauseMode' type='i' access='read'/>"
+    "    <property name='ListeningModeOff' type='b' access='read'/>"
+    "    <property name='ListeningModeTransparency' type='b' access='read'/>"
+    "    <property name='ListeningModeANC' type='b' access='read'/>"
+    "    <property name='ListeningModeAdaptive' type='b' access='read'/>"
     "    <method name='SetNoiseControlMode'>"
     "      <arg type='s' name='mode' direction='in'/>"
     "    </method>"
@@ -40,6 +44,12 @@ static const gchar introspection_xml[] =
     "    </method>"
     "    <method name='SetEarPauseMode'>"
     "      <arg type='i' name='mode' direction='in'/>"
+    "    </method>"
+    "    <method name='SetListeningModes'>"
+    "      <arg type='b' name='off' direction='in'/>"
+    "      <arg type='b' name='transparency' direction='in'/>"
+    "      <arg type='b' name='anc' direction='in'/>"
+    "      <arg type='b' name='adaptive' direction='in'/>"
     "    </method>"
     "    <signal name='DeviceConnected'>"
     "      <arg type='s' name='address'/>"
@@ -83,6 +93,9 @@ struct DbusService {
 
     DbusEarPauseModeCallback ear_pause_mode_callback;
     void *ear_pause_mode_user_data;
+
+    DbusListeningModesCallback listening_modes_callback;
+    void *listening_modes_user_data;
 };
 
 static GVariant *get_property(GDBusConnection *connection,
@@ -138,6 +151,14 @@ static GVariant *get_property(GDBusConnection *connection,
         result = g_variant_new_int32(state->adaptive_noise_level);
     } else if (g_strcmp0(property_name, "EarPauseMode") == 0) {
         result = g_variant_new_int32(state->ear_pause_mode);
+    } else if (g_strcmp0(property_name, "ListeningModeOff") == 0) {
+        result = g_variant_new_boolean(state->listening_modes.off_enabled);
+    } else if (g_strcmp0(property_name, "ListeningModeTransparency") == 0) {
+        result = g_variant_new_boolean(state->listening_modes.transparency_enabled);
+    } else if (g_strcmp0(property_name, "ListeningModeANC") == 0) {
+        result = g_variant_new_boolean(state->listening_modes.anc_enabled);
+    } else if (g_strcmp0(property_name, "ListeningModeAdaptive") == 0) {
+        result = g_variant_new_boolean(state->listening_modes.adaptive_enabled);
     }
 
     g_mutex_unlock(&state->lock);
@@ -201,6 +222,23 @@ static void handle_method_call(GDBusConnection *connection,
 
         if (service->ear_pause_mode_callback) {
             service->ear_pause_mode_callback(mode, service->ear_pause_mode_user_data);
+        }
+
+        g_dbus_method_invocation_return_value(invocation, NULL);
+
+    } else if (g_strcmp0(method_name, "SetListeningModes") == 0) {
+        gboolean off = FALSE, transparency = FALSE, anc = FALSE, adaptive = FALSE;
+        g_variant_get(parameters, "(bbbb)", &off, &transparency, &anc, &adaptive);
+
+        g_message("D-Bus: SetListeningModes(off=%s, transparency=%s, anc=%s, adaptive=%s)",
+                  off ? "true" : "false",
+                  transparency ? "true" : "false",
+                  anc ? "true" : "false",
+                  adaptive ? "true" : "false");
+
+        if (service->listening_modes_callback) {
+            service->listening_modes_callback(off, transparency, anc, adaptive,
+                                               service->listening_modes_user_data);
         }
 
         g_dbus_method_invocation_return_value(invocation, NULL);
@@ -355,6 +393,14 @@ void dbus_service_set_ear_pause_mode_callback(DbusService *service,
 {
     service->ear_pause_mode_callback = callback;
     service->ear_pause_mode_user_data = user_data;
+}
+
+void dbus_service_set_listening_modes_callback(DbusService *service,
+                                                DbusListeningModesCallback callback,
+                                                void *user_data)
+{
+    service->listening_modes_callback = callback;
+    service->listening_modes_user_data = user_data;
 }
 
 static void emit_signal(DbusService *service,

@@ -29,6 +29,9 @@ typedef void (*DbusAdaptiveLevelCallback)(int level, void *user_data);
 /* Callback for ear pause mode change request */
 typedef void (*DbusEarPauseModeCallback)(int mode, void *user_data);
 
+/* Callback for listening modes configuration change request */
+typedef void (*DbusListeningModesCallback)(bool off, bool transparency, bool anc, bool adaptive, void *user_data);
+
 /* D-Bus service context */
 typedef struct DbusService DbusService;
 
@@ -84,6 +87,13 @@ void dbus_service_set_adaptive_level_callback(DbusService *service,
 void dbus_service_set_ear_pause_mode_callback(DbusService *service,
                                                DbusEarPauseModeCallback callback,
                                                void *user_data);
+
+/**
+ * Set callback for listening modes configuration change requests
+ */
+void dbus_service_set_listening_modes_callback(DbusService *service,
+                                                DbusListeningModesCallback callback,
+                                                void *user_data);
 
 /**
  * Emit DeviceConnected signal

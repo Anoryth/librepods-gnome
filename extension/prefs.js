@@ -23,6 +23,10 @@ const AirPodsInterface = `
     <property name="LeftInEar" type="b" access="read"/>
     <property name="RightInEar" type="b" access="read"/>
     <property name="EarPauseMode" type="i" access="read"/>
+    <property name="ListeningModeOff" type="b" access="read"/>
+    <property name="ListeningModeTransparency" type="b" access="read"/>
+    <property name="ListeningModeANC" type="b" access="read"/>
+    <property name="ListeningModeAdaptive" type="b" access="read"/>
     <method name="SetConversationalAwareness">
       <arg type="b" name="enabled" direction="in"/>
     </method>
@@ -31,6 +35,12 @@ const AirPodsInterface = `
     </method>
     <method name="SetEarPauseMode">
       <arg type="i" name="mode" direction="in"/>
+    </method>
+    <method name="SetListeningModes">
+      <arg type="b" name="off" direction="in"/>
+      <arg type="b" name="transparency" direction="in"/>
+      <arg type="b" name="anc" direction="in"/>
+      <arg type="b" name="adaptive" direction="in"/>
     </method>
   </interface>
 </node>
@@ -98,6 +108,41 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
             }),
         });
         featuresGroup.add(this._adaptiveRow);
+
+        /* Long Press Actions group */
+        const longPressGroup = new Adw.PreferencesGroup({
+            title: 'Long Press Actions',
+            description: 'Configure which modes are cycled when pressing and holding the stem',
+        });
+        page.add(longPressGroup);
+
+        /* Off mode */
+        this._lpOffRow = new Adw.SwitchRow({
+            title: 'Off',
+            subtitle: 'Include Off mode in long press cycle',
+        });
+        longPressGroup.add(this._lpOffRow);
+
+        /* Transparency mode */
+        this._lpTransparencyRow = new Adw.SwitchRow({
+            title: 'Transparency',
+            subtitle: 'Include Transparency mode in long press cycle',
+        });
+        longPressGroup.add(this._lpTransparencyRow);
+
+        /* ANC mode */
+        this._lpANCRow = new Adw.SwitchRow({
+            title: 'Noise Cancellation',
+            subtitle: 'Include ANC mode in long press cycle',
+        });
+        longPressGroup.add(this._lpANCRow);
+
+        /* Adaptive mode */
+        this._lpAdaptiveRow = new Adw.SwitchRow({
+            title: 'Adaptive',
+            subtitle: 'Include Adaptive mode in long press cycle',
+        });
+        longPressGroup.add(this._lpAdaptiveRow);
 
         /* Media Control group */
         const mediaGroup = new Adw.PreferencesGroup({
@@ -213,6 +258,41 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
                 this._proxy.SetEarPauseModeRemote(this._earPauseRow.selected, () => {});
             }
         });
+
+        /* Long press modes change handlers */
+        const onListeningModeChanged = () => {
+            if (this._proxy && this._proxy.Connected && !this._updatingListeningModes) {
+                /* Ensure at least 2 modes are enabled */
+                const enabledCount = (this._lpOffRow.active ? 1 : 0) +
+                                     (this._lpTransparencyRow.active ? 1 : 0) +
+                                     (this._lpANCRow.active ? 1 : 0) +
+                                     (this._lpAdaptiveRow.active ? 1 : 0);
+
+                if (enabledCount < 2) {
+                    /* Revert the change - restore from proxy */
+                    this._updatingListeningModes = true;
+                    this._lpOffRow.active = this._proxy.ListeningModeOff;
+                    this._lpTransparencyRow.active = this._proxy.ListeningModeTransparency;
+                    this._lpANCRow.active = this._proxy.ListeningModeANC;
+                    this._lpAdaptiveRow.active = this._proxy.ListeningModeAdaptive;
+                    this._updatingListeningModes = false;
+                    return;
+                }
+
+                this._proxy.SetListeningModesRemote(
+                    this._lpOffRow.active,
+                    this._lpTransparencyRow.active,
+                    this._lpANCRow.active,
+                    this._lpAdaptiveRow.active,
+                    () => {}
+                );
+            }
+        };
+
+        this._lpOffRow.connect('notify::active', onListeningModeChanged);
+        this._lpTransparencyRow.connect('notify::active', onListeningModeChanged);
+        this._lpANCRow.connect('notify::active', onListeningModeChanged);
+        this._lpAdaptiveRow.connect('notify::active', onListeningModeChanged);
     }
 
     _connectProxy() {
@@ -265,6 +345,14 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
             this._adaptiveRow.value = this._proxy.AdaptiveNoiseLevel;
             this._earPauseRow.selected = this._proxy.EarPauseMode;
 
+            /* Update listening modes */
+            this._updatingListeningModes = true;
+            this._lpOffRow.active = this._proxy.ListeningModeOff;
+            this._lpTransparencyRow.active = this._proxy.ListeningModeTransparency;
+            this._lpANCRow.active = this._proxy.ListeningModeANC;
+            this._lpAdaptiveRow.active = this._proxy.ListeningModeAdaptive;
+            this._updatingListeningModes = false;
+
             this._setSensitive(true);
         } else {
             this._statusRow.subtitle = 'Disconnected';
@@ -276,6 +364,11 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
     _setSensitive(sensitive) {
         this._caRow.sensitive = sensitive;
         this._adaptiveRow.sensitive = sensitive;
+        /* Listening modes require AirPods connection */
+        this._lpOffRow.sensitive = sensitive;
+        this._lpTransparencyRow.sensitive = sensitive;
+        this._lpANCRow.sensitive = sensitive;
+        this._lpAdaptiveRow.sensitive = sensitive;
         /* Ear pause mode is always available (doesn't require AirPods connection) */
     }
 }

@@ -62,6 +62,14 @@ typedef struct {
     bool primary_left;      /* Which pod is primary (for mic) */
 } EarDetectionState;
 
+/* Long-press listening modes configuration */
+typedef struct {
+    bool off_enabled;           /* Off mode available on long press */
+    bool transparency_enabled;  /* Transparency mode available */
+    bool anc_enabled;           /* ANC mode available */
+    bool adaptive_enabled;      /* Adaptive mode available */
+} ListeningModesConfig;
+
 /* Complete AirPods state */
 typedef struct {
     /* Connection info */
@@ -78,6 +86,7 @@ typedef struct {
     bool conversational_awareness;
     int adaptive_noise_level;   /* 0-100 */
     bool one_bud_anc_enabled;
+    ListeningModesConfig listening_modes;  /* Long-press modes config */
 
     /* Ear detection */
     EarDetectionState ear_detection;
@@ -124,6 +133,13 @@ void airpods_state_set_conversational_awareness(AirPodsState *state, bool enable
 
 /* Update adaptive noise level */
 void airpods_state_set_adaptive_noise_level(AirPodsState *state, int level);
+
+/* Update listening modes configuration */
+void airpods_state_set_listening_modes(AirPodsState *state,
+                                        bool off_enabled,
+                                        bool transparency_enabled,
+                                        bool anc_enabled,
+                                        bool adaptive_enabled);
 
 /* Get model name as string */
 const char *airpods_model_to_string(AirPodsModel model);

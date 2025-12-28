@@ -28,6 +28,12 @@ void airpods_state_init(AirPodsState *state)
     state->adaptive_noise_level = 50;
     state->one_bud_anc_enabled = false;
 
+    /* Default: Transparency and ANC enabled for long press */
+    state->listening_modes.off_enabled = false;
+    state->listening_modes.transparency_enabled = true;
+    state->listening_modes.anc_enabled = true;
+    state->listening_modes.adaptive_enabled = true;
+
     state->ear_detection.left_in_ear = false;
     state->ear_detection.right_in_ear = false;
     state->ear_detection.primary_left = true;
@@ -139,6 +145,20 @@ void airpods_state_set_adaptive_noise_level(AirPodsState *state, int level)
 {
     g_mutex_lock(&state->lock);
     state->adaptive_noise_level = CLAMP(level, 0, 100);
+    g_mutex_unlock(&state->lock);
+}
+
+void airpods_state_set_listening_modes(AirPodsState *state,
+                                        bool off_enabled,
+                                        bool transparency_enabled,
+                                        bool anc_enabled,
+                                        bool adaptive_enabled)
+{
+    g_mutex_lock(&state->lock);
+    state->listening_modes.off_enabled = off_enabled;
+    state->listening_modes.transparency_enabled = transparency_enabled;
+    state->listening_modes.anc_enabled = anc_enabled;
+    state->listening_modes.adaptive_enabled = adaptive_enabled;
     g_mutex_unlock(&state->lock);
 }
 

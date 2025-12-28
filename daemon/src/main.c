@@ -133,6 +133,26 @@ static void on_bt_data_received(const uint8_t *data, size_t len, void *user_data
         g_debug("CA detection event: volume_level=%d", packet.data.ca_volume_level);
         break;
 
+    case AAP_PKT_TYPE_LISTENING_MODES:
+        g_message("Listening modes: off=%s transparency=%s anc=%s adaptive=%s (raw=0x%02X)",
+                  packet.data.listening_modes.off_enabled ? "on" : "off",
+                  packet.data.listening_modes.transparency_enabled ? "on" : "off",
+                  packet.data.listening_modes.anc_enabled ? "on" : "off",
+                  packet.data.listening_modes.adaptive_enabled ? "on" : "off",
+                  packet.data.listening_modes.raw_value);
+
+        airpods_state_set_listening_modes(&app.state,
+                                           packet.data.listening_modes.off_enabled,
+                                           packet.data.listening_modes.transparency_enabled,
+                                           packet.data.listening_modes.anc_enabled,
+                                           packet.data.listening_modes.adaptive_enabled);
+
+        dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeOff");
+        dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeTransparency");
+        dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeANC");
+        dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeAdaptive");
+        break;
+
     case AAP_PKT_TYPE_METADATA:
         g_message("Metadata received: device='%s' model='%s' manufacturer='%s'",
                   packet.data.metadata.device_name,
@@ -333,6 +353,53 @@ static void on_set_ear_pause_mode(int mode, void *user_data)
     dbus_service_emit_properties_changed(app.dbus_service, "EarPauseMode");
 }
 
+static void on_set_listening_modes(bool off, bool transparency, bool anc, bool adaptive, void *user_data)
+{
+    if (!app.bt_conn || !bt_connection_is_connected(app.bt_conn)) {
+        g_warning("Cannot set listening modes: not connected");
+        return;
+    }
+
+    /* Build the bitmask */
+    uint8_t modes = 0;
+    if (off) modes |= AAP_LISTENING_MODE_OFF;
+    if (transparency) modes |= AAP_LISTENING_MODE_TRANSPARENCY;
+    if (anc) modes |= AAP_LISTENING_MODE_ANC;
+    if (adaptive) modes |= AAP_LISTENING_MODE_ADAPTIVE;
+
+    /* Ensure at least 2 modes are enabled */
+    int count = (off ? 1 : 0) + (transparency ? 1 : 0) + (anc ? 1 : 0) + (adaptive ? 1 : 0);
+    if (count < 2) {
+        g_warning("At least 2 listening modes must be enabled");
+        return;
+    }
+
+    g_message("Setting listening modes: 0x%02X", modes);
+
+    uint8_t packet[AAP_CONTROL_CMD_SIZE];
+    aap_build_listening_modes_cmd(modes, packet);
+    bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
+
+    /* Update local state immediately */
+    airpods_state_set_listening_modes(&app.state, off, transparency, anc, adaptive);
+
+    /* Save to config file for this device */
+    if (app.state.device_address && app.state.device_address[0] != '\0') {
+        ListeningModesConfig lm_config = {
+            .off_enabled = off,
+            .transparency_enabled = transparency,
+            .anc_enabled = anc,
+            .adaptive_enabled = adaptive
+        };
+        config_save_device_listening_modes(app.state.device_address, &lm_config);
+    }
+
+    dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeOff");
+    dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeTransparency");
+    dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeANC");
+    dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeAdaptive");
+}
+
 /* ============================================================================
  * Signal handlers
  * ========================================================================== */
@@ -419,6 +486,7 @@ int main(int argc, char *argv[])
     dbus_service_set_conv_awareness_callback(app.dbus_service, on_set_conv_awareness, NULL);
     dbus_service_set_adaptive_level_callback(app.dbus_service, on_set_adaptive_level, NULL);
     dbus_service_set_ear_pause_mode_callback(app.dbus_service, on_set_ear_pause_mode, NULL);
+    dbus_service_set_listening_modes_callback(app.dbus_service, on_set_listening_modes, NULL);
 
     if (!dbus_service_start(app.dbus_service)) {
         g_error("Failed to start D-Bus service");
