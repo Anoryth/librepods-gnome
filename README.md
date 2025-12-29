@@ -27,6 +27,7 @@ AirPods integration for GNOME Shell on Linux. This project provides full support
 | AirPods 4th Gen (ANC) | ✓ | ✓ | ✓ | ✓ |
 | AirPods Pro | ✓ | ✓ | ✓ | - |
 | AirPods Pro 2 | ✓ | ✓ | ✓ | ✓ |
+| AirPods Pro 3 | ✓ | ✓ | ✓ | ✓ |
 | AirPods Max | ✓ | ✓ | ✓ | - |
 
 ## Architecture
@@ -59,7 +60,17 @@ sudo pacman -S meson ninja glib2 bluez-libs
 
 ## Installation
 
-### 1. Build and Install the Daemon
+### Quick Install (Recommended)
+
+```bash
+./install.sh
+```
+
+This will build and install the daemon, enable the systemd service, and install the GNOME Shell extension.
+
+### Manual Installation
+
+#### 1. Build and Install the Daemon
 
 ```bash
 cd daemon
@@ -68,13 +79,13 @@ ninja -C build
 sudo ninja -C build install
 ```
 
-### 2. Enable the Systemd User Service
+#### 2. Enable the Systemd User Service
 
 ```bash
 systemctl --user enable --now librepods-daemon.service
 ```
 
-### 3. Install the GNOME Shell Extension
+#### 3. Install the GNOME Shell Extension
 
 ```bash
 # Copy extension to GNOME Shell extensions directory
@@ -84,7 +95,7 @@ cp -r extension ~/.local/share/gnome-shell/extensions/librepods@librepods.org
 gnome-extensions enable librepods@librepods.org
 ```
 
-### 4. Restart GNOME Shell
+#### 4. Restart GNOME Shell
 
 - **X11**: Press `Alt+F2`, type `r`, press Enter
 - **Wayland**: Log out and log back in
@@ -101,6 +112,14 @@ gnome-extensions enable librepods@librepods.org
 By default, media will automatically pause when you remove one or both AirPods from your ears, and resume when you put them back in.
 
 ## Uninstallation
+
+### Quick Uninstall
+
+```bash
+./install.sh --uninstall
+```
+
+### Manual Uninstallation
 
 ```bash
 # Stop and disable the daemon
