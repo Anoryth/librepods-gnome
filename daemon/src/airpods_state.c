@@ -62,10 +62,13 @@ void airpods_state_reset(AirPodsState *state)
     state->model = AIRPODS_MODEL_UNKNOWN;
 
     state->battery.left.level = -1;
+    state->battery.left.status = BATTERY_STATUS_UNKNOWN;
     state->battery.left.available = false;
     state->battery.right.level = -1;
+    state->battery.right.status = BATTERY_STATUS_UNKNOWN;
     state->battery.right.available = false;
     state->battery.case_battery.level = -1;
+    state->battery.case_battery.status = BATTERY_STATUS_UNKNOWN;
     state->battery.case_battery.available = false;
 
     state->noise_control_mode = NOISE_CONTROL_OFF;
@@ -181,6 +184,8 @@ const char *airpods_model_to_string(AirPodsModel model)
         return "AirPods Pro 2";
     case AIRPODS_MODEL_PRO_2_USBC:
         return "AirPods Pro 2 (USB-C)";
+    case AIRPODS_MODEL_PRO_3:
+        return "AirPods Pro 3";
     case AIRPODS_MODEL_MAX:
         return "AirPods Max";
     case AIRPODS_MODEL_MAX_USBC:
@@ -232,6 +237,7 @@ bool airpods_model_supports_anc(AirPodsModel model)
     case AIRPODS_MODEL_PRO:
     case AIRPODS_MODEL_PRO_2:
     case AIRPODS_MODEL_PRO_2_USBC:
+    case AIRPODS_MODEL_PRO_3:
     case AIRPODS_MODEL_MAX:
     case AIRPODS_MODEL_MAX_USBC:
     case AIRPODS_MODEL_4_ANC:
@@ -246,6 +252,7 @@ bool airpods_model_supports_adaptive(AirPodsModel model)
     switch (model) {
     case AIRPODS_MODEL_PRO_2:
     case AIRPODS_MODEL_PRO_2_USBC:
+    case AIRPODS_MODEL_PRO_3:
     case AIRPODS_MODEL_4_ANC:
         return true;
     default:
@@ -302,6 +309,10 @@ AirPodsModel airpods_model_from_number(const char *model_number)
         {"A3047", AIRPODS_MODEL_PRO_2_USBC},
         {"A3048", AIRPODS_MODEL_PRO_2_USBC},
         {"A3049", AIRPODS_MODEL_PRO_2_USBC},
+        /* AirPods Pro 3 */
+        {"A3064", AIRPODS_MODEL_PRO_3},
+        {"A3065", AIRPODS_MODEL_PRO_3},
+        {"A3063", AIRPODS_MODEL_PRO_3},
         /* AirPods Max (Lightning) */
         {"A2096", AIRPODS_MODEL_MAX},
         /* AirPods Max (USB-C) */
