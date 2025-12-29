@@ -46,15 +46,18 @@ const AirPodsInterface = `
 </node>
 `;
 
-/* Ear pause mode constants */
-const EAR_PAUSE_DISABLED = 0;
-const EAR_PAUSE_ONE_OUT = 1;
-const EAR_PAUSE_BOTH_OUT = 2;
-
 const AirPodsProxy = Gio.DBusProxy.makeProxyWrapper(AirPodsInterface);
 
 export default class LibrePodsPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
+        this._proxy = null;
+        this._propertiesChangedId = 0;
+
+        /* Cleanup proxy when window is closed */
+        window.connect('close-request', () => {
+            this._disconnectProxy();
+        });
+
         const page = new Adw.PreferencesPage({
             title: 'LibrePods',
             icon_name: 'audio-headphones-symbolic',
@@ -318,7 +321,7 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
     }
 
     _onProxyReady() {
-        this._proxy.connect('g-properties-changed', () => {
+        this._propertiesChangedId = this._proxy.connect('g-properties-changed', () => {
             this._updateState();
         });
 
@@ -326,6 +329,14 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
         this._earPauseRow.selected = this._proxy.EarPauseMode;
 
         this._updateState();
+    }
+
+    _disconnectProxy() {
+        if (this._proxy && this._propertiesChangedId) {
+            this._proxy.disconnect(this._propertiesChangedId);
+            this._propertiesChangedId = 0;
+        }
+        this._proxy = null;
     }
 
     _updateState() {

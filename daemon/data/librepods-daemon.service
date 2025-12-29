@@ -1,6 +1,6 @@
 [Unit]
 Description=LibrePods AirPods Daemon
-Documentation=https://github.com/anoryth/librepods-gnome
+Documentation=https://github.com/Anoryth/librepods-gnome
 After=bluetooth.target
 
 [Service]

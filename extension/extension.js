@@ -129,6 +129,7 @@ class BatteryIndicator extends St.BoxLayout {
 
         this._level = -1;
         this._charging = false;
+        this._currentStyleState = null;
     }
 
     setHeadphonesMode(isHeadphones, deviceModel = null) {
@@ -151,6 +152,10 @@ class BatteryIndicator extends St.BoxLayout {
     }
 
     setLevel(level, charging = false) {
+        /* Skip update if nothing changed */
+        if (this._level === level && this._charging === charging)
+            return;
+
         this._level = level;
         this._charging = charging;
 
@@ -159,38 +164,55 @@ class BatteryIndicator extends St.BoxLayout {
             this._icon.opacity = 128;
             this._progressContainer.opacity = 128;
             this._progressFill.width = 0;
-            this._levelLabel.remove_style_class_name('charging');
-            this._levelLabel.remove_style_class_name('low-battery');
-            this._progressFill.remove_style_class_name('charging');
-            this._progressFill.remove_style_class_name('low');
-            this._progressFill.remove_style_class_name('medium');
+            this._setStyleState(null);
         } else {
             this._levelLabel.text = `${level}%`;
             this._icon.opacity = 255;
             this._progressContainer.opacity = 255;
-
-            /* Set progress bar width (max 40px) */
             this._progressFill.width = Math.round(level * 0.4);
 
-            /* Update label styles */
-            this._levelLabel.remove_style_class_name('charging');
-            this._levelLabel.remove_style_class_name('low-battery');
-
-            /* Update progress bar styles */
-            this._progressFill.remove_style_class_name('charging');
-            this._progressFill.remove_style_class_name('low');
-            this._progressFill.remove_style_class_name('medium');
-
             if (charging) {
-                this._levelLabel.add_style_class_name('charging');
-                this._progressFill.add_style_class_name('charging');
+                this._setStyleState('charging');
             } else if (level <= 20) {
-                this._levelLabel.add_style_class_name('low-battery');
-                this._progressFill.add_style_class_name('low');
+                this._setStyleState('low');
             } else if (level <= 50) {
-                this._progressFill.add_style_class_name('medium');
+                this._setStyleState('medium');
+            } else {
+                this._setStyleState(null);
             }
         }
+    }
+
+    _setStyleState(state) {
+        /* Only update if state changed */
+        if (this._currentStyleState === state)
+            return;
+
+        /* Remove previous state */
+        if (this._currentStyleState) {
+            if (this._currentStyleState === 'charging') {
+                this._levelLabel.remove_style_class_name('charging');
+                this._progressFill.remove_style_class_name('charging');
+            } else if (this._currentStyleState === 'low') {
+                this._levelLabel.remove_style_class_name('low-battery');
+                this._progressFill.remove_style_class_name('low');
+            } else if (this._currentStyleState === 'medium') {
+                this._progressFill.remove_style_class_name('medium');
+            }
+        }
+
+        /* Apply new state */
+        if (state === 'charging') {
+            this._levelLabel.add_style_class_name('charging');
+            this._progressFill.add_style_class_name('charging');
+        } else if (state === 'low') {
+            this._levelLabel.add_style_class_name('low-battery');
+            this._progressFill.add_style_class_name('low');
+        } else if (state === 'medium') {
+            this._progressFill.add_style_class_name('medium');
+        }
+
+        this._currentStyleState = state;
     }
 });
 
@@ -241,7 +263,7 @@ class NoiseControlButton extends St.Button {
 /* Main Quick Settings toggle */
 const LibrePodsToggle = GObject.registerClass(
 class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
-    _init(extensionObject) {
+    _init(extensionObject, proxy) {
         super._init({
             title: 'AirPods',
             subtitle: 'Disconnected',
@@ -250,24 +272,21 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         });
 
         this._extensionObject = extensionObject;
-        this._extensionPath = extensionObject.path;
-        this._proxy = null;
+        this._proxy = proxy;
         this._propertiesChangedId = 0;
         this._signalIds = [];
 
         /* Load settings */
         this._settings = extensionObject.getSettings();
 
-        /* Track battery levels for low battery notifications */
-        this._lastBatteryLeft = -1;
-        this._lastBatteryRight = -1;
+        /* Track low battery notification state */
         this._lowBatteryNotified = {left: false, right: false};
 
         /* Create notification source */
         this._notificationSource = null;
 
         this._createMenu();
-        this._connectProxy();
+        this._connectProxySignals();
     }
 
     _getNotificationSource() {
@@ -362,27 +381,10 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         this._updateDisconnectedState();
     }
 
-    _connectProxy() {
-        try {
-            this._proxy = new AirPodsProxy(
-                Gio.DBus.session,
-                'org.librepods.Daemon',
-                '/org/librepods/AirPods',
-                (proxy, error) => {
-                    if (error) {
-                        console.error('LibrePods: Failed to connect to daemon:', error.message);
-                        return;
-                    }
+    _connectProxySignals() {
+        if (!this._proxy)
+            return;
 
-                    this._onProxyReady();
-                }
-            );
-        } catch (e) {
-            console.error('LibrePods: Error creating proxy:', e.message);
-        }
-    }
-
-    _onProxyReady() {
         /* Connect to property changes */
         this._propertiesChangedId = this._proxy.connect(
             'g-properties-changed',
@@ -634,36 +636,46 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
         /* Add label after indicator icon */
         this.add_child(this._batteryLabel);
 
-        this._toggle = new LibrePodsToggle(extensionObject);
-        this.quickSettingsItems.push(this._toggle);
-
         this._proxy = null;
+        this._toggle = null;
         this._propertiesChangedId = 0;
+        this._extensionObject = extensionObject;
 
-        /* Watch for connection state to show/hide indicator */
-        this._watchConnection();
+        /* Create single shared proxy */
+        this._createProxy();
     }
 
-    _watchConnection() {
+    _createProxy() {
         try {
             this._proxy = new AirPodsProxy(
                 Gio.DBus.session,
                 'org.librepods.Daemon',
                 '/org/librepods/AirPods',
                 (proxy, error) => {
-                    if (error)
+                    if (error) {
+                        console.error('LibrePods: Failed to connect to daemon:', error.message);
                         return;
+                    }
 
-                    this._propertiesChangedId = proxy.connect('g-properties-changed', () => {
-                        this._updateIndicator();
-                    });
-
-                    this._updateIndicator();
+                    this._onProxyReady();
                 }
             );
         } catch (e) {
-            console.error('LibrePods: Watch connection error:', e.message);
+            console.error('LibrePods: Error creating proxy:', e.message);
         }
+    }
+
+    _onProxyReady() {
+        /* Create toggle with shared proxy */
+        this._toggle = new LibrePodsToggle(this._extensionObject, this._proxy);
+        this.quickSettingsItems.push(this._toggle);
+
+        /* Connect to property changes for panel indicator */
+        this._propertiesChangedId = this._proxy.connect('g-properties-changed', () => {
+            this._updateIndicator();
+        });
+
+        this._updateIndicator();
     }
 
     _updateIndicator() {
@@ -715,7 +727,9 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
         if (this._proxy && this._propertiesChangedId > 0) {
             this._proxy.disconnect(this._propertiesChangedId);
         }
-        this._toggle.destroy();
+        if (this._toggle) {
+            this._toggle.destroy();
+        }
         super.destroy();
     }
 });

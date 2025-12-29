@@ -50,6 +50,8 @@ static void disconnect_from_airpods(void);
 
 static void on_bt_data_received(const uint8_t *data, size_t len, void *user_data)
 {
+    (void)user_data;
+
     AapParsedPacket packet;
     AapParseResult result = aap_parse_packet(data, len, &packet);
 
@@ -62,10 +64,13 @@ static void on_bt_data_received(const uint8_t *data, size_t len, void *user_data
 
     switch (packet.type) {
     case AAP_PKT_TYPE_BATTERY:
-        g_message("Battery: L=%d%% R=%d%% Case=%d%%",
+        g_message("Battery: L=%d%% (status=%d) R=%d%% (status=%d) Case=%d%% (status=%d)",
                   packet.data.battery.left_level,
+                  packet.data.battery.left_status,
                   packet.data.battery.right_level,
-                  packet.data.battery.case_level);
+                  packet.data.battery.right_status,
+                  packet.data.battery.case_level,
+                  packet.data.battery.case_status);
 
         airpods_state_set_battery(&app.state,
                                    packet.data.battery.left_level,
@@ -82,6 +87,9 @@ static void on_bt_data_received(const uint8_t *data, size_t len, void *user_data
         dbus_service_emit_properties_changed(app.dbus_service, "BatteryLeft");
         dbus_service_emit_properties_changed(app.dbus_service, "BatteryRight");
         dbus_service_emit_properties_changed(app.dbus_service, "BatteryCase");
+        dbus_service_emit_properties_changed(app.dbus_service, "ChargingLeft");
+        dbus_service_emit_properties_changed(app.dbus_service, "ChargingRight");
+        dbus_service_emit_properties_changed(app.dbus_service, "ChargingCase");
         break;
 
     case AAP_PKT_TYPE_EAR_DETECTION:
@@ -183,6 +191,8 @@ static void on_bt_data_received(const uint8_t *data, size_t len, void *user_data
 
 static void on_bt_state_changed(BluetoothState state, const char *error, void *user_data)
 {
+    (void)user_data;
+
     switch (state) {
     case BT_STATE_CONNECTED:
         g_message("Bluetooth connected, sending handshake...");
@@ -205,7 +215,7 @@ static void on_bt_state_changed(BluetoothState state, const char *error, void *u
         airpods_state_set_device(&app.state,
                                   app.pending_name,
                                   app.pending_address,
-                                  AIRPODS_MODEL_UNKNOWN);  /* TODO: detect model */
+                                  AIRPODS_MODEL_UNKNOWN);  /* Model detected later via metadata */
 
         dbus_service_emit_device_connected(app.dbus_service,
                                             app.pending_address,
@@ -281,12 +291,14 @@ static void disconnect_from_airpods(void)
 
 static void on_bluez_device_connected(const BluezDeviceInfo *device, void *user_data)
 {
+    (void)user_data;
     g_message("BlueZ: AirPods connected - %s (%s)", device->name, device->address);
     connect_to_airpods(device->address, device->name);
 }
 
 static void on_bluez_device_disconnected(const BluezDeviceInfo *device, void *user_data)
 {
+    (void)user_data;
     g_message("BlueZ: AirPods disconnected - %s (%s)", device->name, device->address);
     disconnect_from_airpods();
 }
@@ -297,6 +309,8 @@ static void on_bluez_device_disconnected(const BluezDeviceInfo *device, void *us
 
 static void on_set_noise_control(NoiseControlMode mode, void *user_data)
 {
+    (void)user_data;
+
     if (!app.bt_conn || !bt_connection_is_connected(app.bt_conn)) {
         g_warning("Cannot set noise control: not connected");
         return;
@@ -309,6 +323,8 @@ static void on_set_noise_control(NoiseControlMode mode, void *user_data)
 
 static void on_set_conv_awareness(bool enabled, void *user_data)
 {
+    (void)user_data;
+
     if (!app.bt_conn || !bt_connection_is_connected(app.bt_conn)) {
         g_warning("Cannot set conversational awareness: not connected");
         return;
@@ -321,6 +337,8 @@ static void on_set_conv_awareness(bool enabled, void *user_data)
 
 static void on_set_adaptive_level(int level, void *user_data)
 {
+    (void)user_data;
+
     if (!app.bt_conn || !bt_connection_is_connected(app.bt_conn)) {
         g_warning("Cannot set adaptive level: not connected");
         return;
@@ -333,6 +351,8 @@ static void on_set_adaptive_level(int level, void *user_data)
 
 static void on_set_ear_pause_mode(int mode, void *user_data)
 {
+    (void)user_data;
+
     g_message("Setting ear pause mode to %d", mode);
 
     /* Update state */
@@ -355,6 +375,8 @@ static void on_set_ear_pause_mode(int mode, void *user_data)
 
 static void on_set_listening_modes(bool off, bool transparency, bool anc, bool adaptive, void *user_data)
 {
+    (void)user_data;
+
     if (!app.bt_conn || !bt_connection_is_connected(app.bt_conn)) {
         g_warning("Cannot set listening modes: not connected");
         return;
@@ -406,6 +428,7 @@ static void on_set_listening_modes(bool off, bool transparency, bool anc, bool a
 
 static gboolean on_sigint(gpointer user_data)
 {
+    (void)user_data;
     g_message("Received SIGINT, shutting down...");
     g_main_loop_quit(app.main_loop);
     return G_SOURCE_REMOVE;
@@ -413,6 +436,7 @@ static gboolean on_sigint(gpointer user_data)
 
 static gboolean on_sigterm(gpointer user_data)
 {
+    (void)user_data;
     g_message("Received SIGTERM, shutting down...");
     g_main_loop_quit(app.main_loop);
     return G_SOURCE_REMOVE;
@@ -459,6 +483,9 @@ static void cleanup(void)
 
 int main(int argc, char *argv[])
 {
+    (void)argc;
+    (void)argv;
+
     g_message("LibrePods Daemon starting...");
 
     /* Load configuration */
