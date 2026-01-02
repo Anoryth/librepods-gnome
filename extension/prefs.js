@@ -18,6 +18,8 @@ const AirPodsInterface = `
   <interface name="org.librepods.AirPods1">
     <property name="Connected" type="b" access="read"/>
     <property name="DeviceName" type="s" access="read"/>
+    <property name="DeviceModel" type="s" access="read"/>
+    <property name="DisplayName" type="s" access="read"/>
     <property name="ConversationalAwareness" type="b" access="read"/>
     <property name="AdaptiveNoiseLevel" type="i" access="read"/>
     <property name="LeftInEar" type="b" access="read"/>
@@ -41,6 +43,9 @@ const AirPodsInterface = `
       <arg type="b" name="transparency" direction="in"/>
       <arg type="b" name="anc" direction="in"/>
       <arg type="b" name="adaptive" direction="in"/>
+    </method>
+    <method name="SetDisplayName">
+      <arg type="s" name="name" direction="in"/>
     </method>
   </interface>
 </node>
@@ -84,6 +89,28 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
             icon_name: 'audio-headphones-symbolic',
         });
         statusGroup.add(this._earDetectionRow);
+
+        /* Device Profile group */
+        const profileGroup = new Adw.PreferencesGroup({
+            title: 'Device Profile',
+            description: 'Customize your AirPods settings',
+        });
+        page.add(profileGroup);
+
+        /* Custom name entry */
+        this._displayNameRow = new Adw.EntryRow({
+            title: 'Custom Name',
+            show_apply_button: true,
+        });
+        profileGroup.add(this._displayNameRow);
+
+        /* Hint row */
+        const nameHintRow = new Adw.ActionRow({
+            title: '',
+            subtitle: 'Leave empty to use the device model name',
+        });
+        nameHintRow.add_css_class('dim-label');
+        profileGroup.add(nameHintRow);
 
         /* Features group */
         const featuresGroup = new Adw.PreferencesGroup({
@@ -296,6 +323,14 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
         this._lpTransparencyRow.connect('notify::active', onListeningModeChanged);
         this._lpANCRow.connect('notify::active', onListeningModeChanged);
         this._lpAdaptiveRow.connect('notify::active', onListeningModeChanged);
+
+        /* Custom name change handler */
+        this._displayNameRow.connect('apply', () => {
+            if (this._proxy && this._proxy.Connected) {
+                const newName = this._displayNameRow.text.trim();
+                this._proxy.SetDisplayNameRemote(newName, () => {});
+            }
+        });
     }
 
     _connectProxy() {
@@ -346,11 +381,21 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
         const connected = this._proxy.Connected;
 
         if (connected) {
-            this._statusRow.subtitle = `Connected: ${this._proxy.DeviceName || 'AirPods'}`;
+            const displayName = this._proxy.DisplayName || this._proxy.DeviceModel || 'AirPods';
+            this._statusRow.subtitle = `Connected: ${displayName}`;
 
             const leftEar = this._proxy.LeftInEar ? 'In ear' : 'Out';
             const rightEar = this._proxy.RightInEar ? 'In ear' : 'Out';
             this._earDetectionRow.subtitle = `Left: ${leftEar}, Right: ${rightEar}`;
+
+            /* Update display name entry - show custom name or empty for model default */
+            const modelName = this._proxy.DeviceModel || 'AirPods';
+            if (this._proxy.DisplayName && this._proxy.DisplayName !== modelName) {
+                this._displayNameRow.text = this._proxy.DisplayName;
+            } else {
+                this._displayNameRow.text = '';
+            }
+            this._displayNameRow.set_tooltip_text(`Device model: ${modelName}`);
 
             this._caRow.active = this._proxy.ConversationalAwareness;
             this._adaptiveRow.value = this._proxy.AdaptiveNoiseLevel;
@@ -368,6 +413,7 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
         } else {
             this._statusRow.subtitle = 'Disconnected';
             this._earDetectionRow.subtitle = 'No device connected';
+            this._displayNameRow.text = '';
             this._setSensitive(false);
         }
     }
@@ -375,6 +421,7 @@ export default class LibrePodsPreferences extends ExtensionPreferences {
     _setSensitive(sensitive) {
         this._caRow.sensitive = sensitive;
         this._adaptiveRow.sensitive = sensitive;
+        this._displayNameRow.sensitive = sensitive;
         /* Listening modes require AirPods connection */
         this._lpOffRow.sensitive = sensitive;
         this._lpTransparencyRow.sensitive = sensitive;

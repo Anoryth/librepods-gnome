@@ -77,6 +77,7 @@ typedef struct {
     bool connected;
     char *device_name;
     char *device_address;
+    char *display_name;     /* Custom display name (NULL = use model name) */
     AirPodsModel model;
 
     /* Battery */
@@ -113,6 +114,12 @@ void airpods_state_set_device(AirPodsState *state,
                                const char *name,
                                const char *address,
                                AirPodsModel model);
+
+/* Set custom display name */
+void airpods_state_set_display_name(AirPodsState *state, const char *display_name);
+
+/* Get display name (returns custom name if set, otherwise model name) */
+const char *airpods_state_get_display_name(AirPodsState *state);
 
 /* Update battery state */
 void airpods_state_set_battery(AirPodsState *state,

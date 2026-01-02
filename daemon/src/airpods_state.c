@@ -14,6 +14,7 @@ void airpods_state_init(AirPodsState *state)
     state->connected = false;
     state->device_name = NULL;
     state->device_address = NULL;
+    state->display_name = NULL;
     state->model = AIRPODS_MODEL_UNKNOWN;
 
     state->battery.left.level = -1;
@@ -44,8 +45,10 @@ void airpods_state_cleanup(AirPodsState *state)
     g_mutex_lock(&state->lock);
     g_free(state->device_name);
     g_free(state->device_address);
+    g_free(state->display_name);
     state->device_name = NULL;
     state->device_address = NULL;
+    state->display_name = NULL;
     g_mutex_unlock(&state->lock);
     g_mutex_clear(&state->lock);
 }
@@ -57,8 +60,10 @@ void airpods_state_reset(AirPodsState *state)
     state->connected = false;
     g_free(state->device_name);
     g_free(state->device_address);
+    g_free(state->display_name);
     state->device_name = NULL;
     state->device_address = NULL;
+    state->display_name = NULL;
     state->model = AIRPODS_MODEL_UNKNOWN;
 
     state->battery.left.level = -1;
@@ -94,6 +99,28 @@ void airpods_state_set_device(AirPodsState *state,
     state->model = model;
     state->connected = true;
     g_mutex_unlock(&state->lock);
+}
+
+void airpods_state_set_display_name(AirPodsState *state, const char *display_name)
+{
+    g_mutex_lock(&state->lock);
+    g_free(state->display_name);
+    /* Empty string means no custom name (use model) */
+    if (display_name && display_name[0] != '\0') {
+        state->display_name = g_strdup(display_name);
+    } else {
+        state->display_name = NULL;
+    }
+    g_mutex_unlock(&state->lock);
+}
+
+const char *airpods_state_get_display_name(AirPodsState *state)
+{
+    /* Note: caller must hold lock or accept potential race */
+    if (state->display_name && state->display_name[0] != '\0') {
+        return state->display_name;
+    }
+    return airpods_model_to_string(state->model);
 }
 
 void airpods_state_set_battery(AirPodsState *state,

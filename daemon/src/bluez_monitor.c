@@ -158,10 +158,10 @@ static BluezDeviceInfo *get_device_info(GDBusConnection *connection, const char 
 }
 
 static void on_properties_changed(GDBusConnection *connection,
-                                   const gchar *sender_name,
+                                   const gchar *sender_name G_GNUC_UNUSED,
                                    const gchar *object_path,
-                                   const gchar *interface_name,
-                                   const gchar *signal_name,
+                                   const gchar *interface_name G_GNUC_UNUSED,
+                                   const gchar *signal_name G_GNUC_UNUSED,
                                    GVariant *parameters,
                                    gpointer user_data)
 {
@@ -226,10 +226,10 @@ static void on_properties_changed(GDBusConnection *connection,
 }
 
 static void on_interfaces_added(GDBusConnection *connection,
-                                 const gchar *sender_name,
-                                 const gchar *object_path,
-                                 const gchar *interface_name,
-                                 const gchar *signal_name,
+                                 const gchar *sender_name G_GNUC_UNUSED,
+                                 const gchar *object_path G_GNUC_UNUSED,
+                                 const gchar *interface_name G_GNUC_UNUSED,
+                                 const gchar *signal_name G_GNUC_UNUSED,
                                  GVariant *parameters,
                                  gpointer user_data)
 {
@@ -267,11 +267,11 @@ static void on_interfaces_added(GDBusConnection *connection,
     }
 }
 
-static void on_interfaces_removed(GDBusConnection *connection,
-                                   const gchar *sender_name,
-                                   const gchar *object_path,
-                                   const gchar *interface_name,
-                                   const gchar *signal_name,
+static void on_interfaces_removed(GDBusConnection *connection G_GNUC_UNUSED,
+                                   const gchar *sender_name G_GNUC_UNUSED,
+                                   const gchar *object_path G_GNUC_UNUSED,
+                                   const gchar *interface_name G_GNUC_UNUSED,
+                                   const gchar *signal_name G_GNUC_UNUSED,
                                    GVariant *parameters,
                                    gpointer user_data)
 {

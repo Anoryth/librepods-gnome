@@ -125,7 +125,9 @@ bool bt_connection_connect(BluetoothConnection *conn, const char *address)
 
     /* Set non-blocking after connect */
     int flags = fcntl(conn->socket_fd, F_GETFL, 0);
-    fcntl(conn->socket_fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags < 0 || fcntl(conn->socket_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        g_warning("Failed to set non-blocking mode: %s", strerror(errno));
+    }
 
     g_message("Connected to %s", address);
     set_state(conn, BT_STATE_CONNECTED, NULL);
@@ -211,7 +213,7 @@ typedef struct {
     GPollFD poll_fd;
 } BtSource;
 
-static gboolean bt_source_prepare(GSource *source, gint *timeout)
+static gboolean bt_source_prepare(GSource *source G_GNUC_UNUSED, gint *timeout)
 {
     *timeout = -1;
     return FALSE;
@@ -224,8 +226,8 @@ static gboolean bt_source_check(GSource *source)
 }
 
 static gboolean bt_source_dispatch(GSource *source,
-                                    GSourceFunc callback,
-                                    gpointer user_data)
+                                    GSourceFunc callback G_GNUC_UNUSED,
+                                    gpointer user_data G_GNUC_UNUSED)
 {
     BtSource *bt_source = (BtSource *)source;
     BluetoothConnection *conn = bt_source->conn;
@@ -261,7 +263,7 @@ static gboolean bt_source_dispatch(GSource *source,
     return G_SOURCE_CONTINUE;
 }
 
-static void bt_source_finalize(GSource *source)
+static void bt_source_finalize(GSource *source G_GNUC_UNUSED)
 {
     /* Nothing to clean up */
 }

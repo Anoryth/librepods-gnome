@@ -24,6 +24,7 @@ const AirPodsInterface = `
     <property name="Connected" type="b" access="read"/>
     <property name="DeviceName" type="s" access="read"/>
     <property name="DeviceModel" type="s" access="read"/>
+    <property name="DisplayName" type="s" access="read"/>
     <property name="IsHeadphones" type="b" access="read"/>
     <property name="SupportsANC" type="b" access="read"/>
     <property name="SupportsAdaptive" type="b" access="read"/>
@@ -263,7 +264,7 @@ class NoiseControlButton extends St.Button {
 /* Main Quick Settings toggle */
 const LibrePodsToggle = GObject.registerClass(
 class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
-    _init(extensionObject, proxy) {
+    _init(extensionObject) {
         super._init({
             title: 'AirPods',
             subtitle: 'Disconnected',
@@ -272,7 +273,7 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         });
 
         this._extensionObject = extensionObject;
-        this._proxy = proxy;
+        this._proxy = null;
         this._propertiesChangedId = 0;
         this._signalIds = [];
 
@@ -286,6 +287,10 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
         this._notificationSource = null;
 
         this._createMenu();
+    }
+
+    setProxy(proxy) {
+        this._proxy = proxy;
         this._connectProxySignals();
     }
 
@@ -502,7 +507,7 @@ class LibrePodsToggle extends QuickSettings.QuickMenuToggle {
             const supportsAdaptive = this._proxy.SupportsAdaptive || false;
             const deviceModel = this._proxy.DeviceModel || null;
 
-            this.subtitle = this._proxy.DeviceName || 'Connected';
+            this.subtitle = this._proxy.DisplayName || this._proxy.DeviceModel || 'Connected';
             this.checked = true;
             this._batteryBox.opacity = 255;
 
@@ -637,11 +642,14 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
         this.add_child(this._batteryLabel);
 
         this._proxy = null;
-        this._toggle = null;
         this._propertiesChangedId = 0;
         this._extensionObject = extensionObject;
 
-        /* Create single shared proxy */
+        /* Create toggle immediately so it's available for addExternalIndicator */
+        this._toggle = new LibrePodsToggle(extensionObject);
+        this.quickSettingsItems.push(this._toggle);
+
+        /* Create proxy asynchronously */
         this._createProxy();
     }
 
@@ -666,9 +674,8 @@ class LibrePodsIndicator extends QuickSettings.SystemIndicator {
     }
 
     _onProxyReady() {
-        /* Create toggle with shared proxy */
-        this._toggle = new LibrePodsToggle(this._extensionObject, this._proxy);
-        this.quickSettingsItems.push(this._toggle);
+        /* Pass proxy to toggle */
+        this._toggle.setProxy(this._proxy);
 
         /* Connect to property changes for panel indicator */
         this._propertiesChangedId = this._proxy.connect('g-properties-changed', () => {

@@ -9,6 +9,7 @@
 #include <glib-unix.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
 
 #include "airpods_state.h"
@@ -43,6 +44,8 @@ static AppContext app = {0};
 /* Forward declarations */
 static void connect_to_airpods(const char *address, const char *name);
 static void disconnect_from_airpods(void);
+static void apply_device_profile(const char *address);
+static gboolean apply_saved_settings_idle(gpointer user_data);
 
 /* ============================================================================
  * Bluetooth data handling
@@ -217,12 +220,19 @@ static void on_bt_state_changed(BluetoothState state, const char *error, void *u
                                   app.pending_address,
                                   AIRPODS_MODEL_UNKNOWN);  /* Model detected later via metadata */
 
+        /* Load and apply saved device profile */
+        apply_device_profile(app.pending_address);
+
         dbus_service_emit_device_connected(app.dbus_service,
                                             app.pending_address,
                                             app.pending_name);
         dbus_service_emit_properties_changed(app.dbus_service, "Connected");
         dbus_service_emit_properties_changed(app.dbus_service, "DeviceName");
         dbus_service_emit_properties_changed(app.dbus_service, "DeviceAddress");
+        dbus_service_emit_properties_changed(app.dbus_service, "DisplayName");
+
+        /* Schedule sending saved settings after connection stabilizes (500ms delay) */
+        g_timeout_add(500, apply_saved_settings_idle, g_strdup(app.pending_address));
         break;
 
     case BT_STATE_DISCONNECTED:
@@ -245,6 +255,85 @@ static void on_bt_state_changed(BluetoothState state, const char *error, void *u
     default:
         break;
     }
+}
+
+/* ============================================================================
+ * Device profile management
+ * ========================================================================== */
+
+static void apply_device_profile(const char *address)
+{
+    if (address == NULL || address[0] == '\0') {
+        return;
+    }
+
+    DeviceProfile profile;
+    bool has_profile = config_load_device_profile(address, &profile);
+
+    if (!has_profile || !profile.has_saved_settings) {
+        g_message("No saved profile for device %s, using defaults", address);
+        return;
+    }
+
+    g_message("Applying saved profile for device %s", address);
+
+    /* Apply display name */
+    airpods_state_set_display_name(&app.state, profile.display_name);
+
+    /* Apply listening modes */
+    airpods_state_set_listening_modes(&app.state,
+                                       profile.listening_modes.off_enabled,
+                                       profile.listening_modes.transparency_enabled,
+                                       profile.listening_modes.anc_enabled,
+                                       profile.listening_modes.adaptive_enabled);
+
+    /* Apply conversational awareness (will be sent after connection stabilizes) */
+    g_mutex_lock(&app.state.lock);
+    app.state.conversational_awareness = profile.conversational_awareness;
+    app.state.adaptive_noise_level = profile.adaptive_noise_level;
+    g_mutex_unlock(&app.state.lock);
+}
+
+static gboolean apply_saved_settings_idle(gpointer user_data)
+{
+    const char *address = (const char *)user_data;
+
+    if (!app.bt_conn || !bt_connection_is_connected(app.bt_conn)) {
+        g_free((gchar *)address);
+        return G_SOURCE_REMOVE;
+    }
+
+    DeviceProfile profile;
+    if (!config_load_device_profile(address, &profile) || !profile.has_saved_settings) {
+        g_free((gchar *)address);
+        return G_SOURCE_REMOVE;
+    }
+
+    g_message("Sending saved settings to AirPods...");
+
+    /* Send listening modes configuration */
+    uint8_t modes = 0;
+    if (profile.listening_modes.off_enabled) modes |= AAP_LISTENING_MODE_OFF;
+    if (profile.listening_modes.transparency_enabled) modes |= AAP_LISTENING_MODE_TRANSPARENCY;
+    if (profile.listening_modes.anc_enabled) modes |= AAP_LISTENING_MODE_ANC;
+    if (profile.listening_modes.adaptive_enabled) modes |= AAP_LISTENING_MODE_ADAPTIVE;
+
+    uint8_t packet[AAP_CONTROL_CMD_SIZE];
+    aap_build_listening_modes_cmd(modes, packet);
+    bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
+
+    /* Send conversational awareness setting */
+    g_usleep(50000);  /* 50ms delay between commands */
+    aap_build_conv_awareness_cmd(profile.conversational_awareness, packet);
+    bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
+
+    /* Send adaptive noise level */
+    g_usleep(50000);
+    aap_build_adaptive_level_cmd(profile.adaptive_noise_level, packet);
+    bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
+
+    g_free((gchar *)address);
+    return G_SOURCE_REMOVE;
 }
 
 /* ============================================================================
@@ -333,6 +422,14 @@ static void on_set_conv_awareness(bool enabled, void *user_data)
     uint8_t packet[AAP_CONTROL_CMD_SIZE];
     aap_build_conv_awareness_cmd(enabled, packet);
     bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
+
+    /* Save to device profile */
+    if (app.state.device_address && app.state.device_address[0] != '\0') {
+        DeviceProfile profile;
+        config_load_device_profile(app.state.device_address, &profile);
+        profile.conversational_awareness = enabled;
+        config_save_device_profile(app.state.device_address, &profile);
+    }
 }
 
 static void on_set_adaptive_level(int level, void *user_data)
@@ -347,6 +444,14 @@ static void on_set_adaptive_level(int level, void *user_data)
     uint8_t packet[AAP_CONTROL_CMD_SIZE];
     aap_build_adaptive_level_cmd(level, packet);
     bt_connection_send(app.bt_conn, packet, AAP_CONTROL_CMD_SIZE);
+
+    /* Save to device profile */
+    if (app.state.device_address && app.state.device_address[0] != '\0') {
+        DeviceProfile profile;
+        config_load_device_profile(app.state.device_address, &profile);
+        profile.adaptive_noise_level = level;
+        config_save_device_profile(app.state.device_address, &profile);
+    }
 }
 
 static void on_set_ear_pause_mode(int mode, void *user_data)
@@ -405,21 +510,47 @@ static void on_set_listening_modes(bool off, bool transparency, bool anc, bool a
     /* Update local state immediately */
     airpods_state_set_listening_modes(&app.state, off, transparency, anc, adaptive);
 
-    /* Save to config file for this device */
+    /* Save to device profile */
     if (app.state.device_address && app.state.device_address[0] != '\0') {
-        ListeningModesConfig lm_config = {
-            .off_enabled = off,
-            .transparency_enabled = transparency,
-            .anc_enabled = anc,
-            .adaptive_enabled = adaptive
-        };
-        config_save_device_listening_modes(app.state.device_address, &lm_config);
+        DeviceProfile profile;
+        config_load_device_profile(app.state.device_address, &profile);
+        profile.listening_modes.off_enabled = off;
+        profile.listening_modes.transparency_enabled = transparency;
+        profile.listening_modes.anc_enabled = anc;
+        profile.listening_modes.adaptive_enabled = adaptive;
+        config_save_device_profile(app.state.device_address, &profile);
     }
 
     dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeOff");
     dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeTransparency");
     dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeANC");
     dbus_service_emit_properties_changed(app.dbus_service, "ListeningModeAdaptive");
+}
+
+static void on_set_display_name(const char *name, void *user_data)
+{
+    (void)user_data;
+
+    g_message("Setting display name to '%s'", name ? name : "");
+
+    /* Update state */
+    airpods_state_set_display_name(&app.state, name);
+
+    /* Save to device profile */
+    if (app.state.device_address && app.state.device_address[0] != '\0') {
+        DeviceProfile profile;
+        config_load_device_profile(app.state.device_address, &profile);
+        if (name && name[0] != '\0') {
+            strncpy(profile.display_name, name, sizeof(profile.display_name) - 1);
+            profile.display_name[sizeof(profile.display_name) - 1] = '\0';
+        } else {
+            profile.display_name[0] = '\0';
+        }
+        config_save_device_profile(app.state.device_address, &profile);
+    }
+
+    /* Notify property change */
+    dbus_service_emit_properties_changed(app.dbus_service, "DisplayName");
 }
 
 /* ============================================================================
@@ -514,6 +645,7 @@ int main(int argc, char *argv[])
     dbus_service_set_adaptive_level_callback(app.dbus_service, on_set_adaptive_level, NULL);
     dbus_service_set_ear_pause_mode_callback(app.dbus_service, on_set_ear_pause_mode, NULL);
     dbus_service_set_listening_modes_callback(app.dbus_service, on_set_listening_modes, NULL);
+    dbus_service_set_display_name_callback(app.dbus_service, on_set_display_name, NULL);
 
     if (!dbus_service_start(app.dbus_service)) {
         g_error("Failed to start D-Bus service");

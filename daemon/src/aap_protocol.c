@@ -48,7 +48,7 @@ const uint8_t AAP_PKT_CA_DISABLE[AAP_CONTROL_CMD_SIZE] = {
 
 bool aap_has_valid_header(const uint8_t *data, size_t len)
 {
-    if (len < AAP_HEADER_SIZE)
+    if (data == NULL || len < AAP_HEADER_SIZE)
         return false;
 
     return (data[0] == AAP_HEADER_BYTE0 &&
@@ -59,7 +59,7 @@ bool aap_has_valid_header(const uint8_t *data, size_t len)
 
 uint8_t aap_get_opcode(const uint8_t *data, size_t len)
 {
-    if (len < 5)
+    if (data == NULL || len < 5)
         return 0;
     return data[4];
 }
@@ -90,14 +90,12 @@ AapParseResult aap_parse_battery(const uint8_t *data, size_t len, AapBatteryData
     battery->right_status = BATTERY_STATUS_UNKNOWN;
     battery->case_status = BATTERY_STATUS_UNKNOWN;
 
-    /* Parse each component */
+    /* Parse each component (5 bytes: component, spacer, level, status, end_marker) */
     for (uint8_t i = 0; i < count; i++) {
         size_t offset = 7 + (i * 5);
         uint8_t component = data[offset];
-        /* uint8_t spacer = data[offset + 1]; */  /* Should be 0x01 */
         uint8_t level = data[offset + 2];
         uint8_t status = data[offset + 3];
-        /* uint8_t end_marker = data[offset + 4]; */  /* Should be 0x01 */
 
         BatteryStatus bat_status;
         switch (status) {

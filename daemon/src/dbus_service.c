@@ -14,6 +14,7 @@ static const gchar introspection_xml[] =
     "    <property name='DeviceName' type='s' access='read'/>"
     "    <property name='DeviceAddress' type='s' access='read'/>"
     "    <property name='DeviceModel' type='s' access='read'/>"
+    "    <property name='DisplayName' type='s' access='read'/>"
     "    <property name='IsHeadphones' type='b' access='read'/>"
     "    <property name='SupportsANC' type='b' access='read'/>"
     "    <property name='SupportsAdaptive' type='b' access='read'/>"
@@ -50,6 +51,9 @@ static const gchar introspection_xml[] =
     "      <arg type='b' name='transparency' direction='in'/>"
     "      <arg type='b' name='anc' direction='in'/>"
     "      <arg type='b' name='adaptive' direction='in'/>"
+    "    </method>"
+    "    <method name='SetDisplayName'>"
+    "      <arg type='s' name='name' direction='in'/>"
     "    </method>"
     "    <signal name='DeviceConnected'>"
     "      <arg type='s' name='address'/>"
@@ -96,6 +100,9 @@ struct DbusService {
 
     DbusListeningModesCallback listening_modes_callback;
     void *listening_modes_user_data;
+
+    DbusDisplayNameCallback display_name_callback;
+    void *display_name_user_data;
 };
 
 static GVariant *get_property(GDBusConnection *connection,
@@ -121,6 +128,8 @@ static GVariant *get_property(GDBusConnection *connection,
         result = g_variant_new_string(state->device_address ? state->device_address : "");
     } else if (g_strcmp0(property_name, "DeviceModel") == 0) {
         result = g_variant_new_string(airpods_model_to_string(state->model));
+    } else if (g_strcmp0(property_name, "DisplayName") == 0) {
+        result = g_variant_new_string(airpods_state_get_display_name(state));
     } else if (g_strcmp0(property_name, "IsHeadphones") == 0) {
         result = g_variant_new_boolean(airpods_model_is_headphones(state->model));
     } else if (g_strcmp0(property_name, "SupportsANC") == 0) {
@@ -239,6 +248,18 @@ static void handle_method_call(GDBusConnection *connection,
         if (service->listening_modes_callback) {
             service->listening_modes_callback(off, transparency, anc, adaptive,
                                                service->listening_modes_user_data);
+        }
+
+        g_dbus_method_invocation_return_value(invocation, NULL);
+
+    } else if (g_strcmp0(method_name, "SetDisplayName") == 0) {
+        const gchar *name = NULL;
+        g_variant_get(parameters, "(&s)", &name);
+
+        g_message("D-Bus: SetDisplayName('%s')", name ? name : "");
+
+        if (service->display_name_callback) {
+            service->display_name_callback(name, service->display_name_user_data);
         }
 
         g_dbus_method_invocation_return_value(invocation, NULL);
@@ -401,6 +422,14 @@ void dbus_service_set_listening_modes_callback(DbusService *service,
 {
     service->listening_modes_callback = callback;
     service->listening_modes_user_data = user_data;
+}
+
+void dbus_service_set_display_name_callback(DbusService *service,
+                                             DbusDisplayNameCallback callback,
+                                             void *user_data)
+{
+    service->display_name_callback = callback;
+    service->display_name_user_data = user_data;
 }
 
 static void emit_signal(DbusService *service,
